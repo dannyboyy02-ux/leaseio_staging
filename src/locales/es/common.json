@@ -884,6 +884,7 @@
   },
   "dashboard": {
     "welcome_back": "Bienvenido de nuevo",
+    "access_denied_notice": "No tiene permiso para ver esa página; consulte a un administrador del espacio de trabajo si necesita acceso.",
     "first_run_title": "Agregue su primer arrendamiento",
     "first_run_desc": "Solicite la aprobación de un nuevo arrendamiento o suba un documento firmado; la IA extrae los términos clave y su panel se completa a partir de ahí.",
     "upload_lease": "Subir Arrendamiento",
@@ -2855,6 +2856,7 @@
   "common": {
     "confirm": "Confirmar",
     "cancel": "Cancelar",
+    "no_results": "Sin resultados.",
     "undo": "Deshacer",
     "more_actions": "Más acciones",
     "save": "Guardar",
@@ -3663,7 +3665,9 @@
     "member_wall_switch": "Cambiar de espacio"
   },
   "readonly": {
-    "lease_note": "Este espacio de trabajo es de solo lectura: puedes ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas."
+    "lease_note": "Este espacio de trabajo es de solo lectura: puedes ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
+    "viewer_note": "Su rol en este espacio de trabajo es de solo lectura: puede ver y exportar, pero la edición, las aprobaciones y las cargas están deshabilitadas.",
+    "write_rejected": "Su cambio no se guardó: no tiene permiso para editar este arrendamiento."
   },
   "routing_failed": {
     "title": "El enrutamiento de aprobación no se completó",

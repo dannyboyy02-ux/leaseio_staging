@@ -3,7 +3,9 @@ import { Copy, Check, Share2, Eye, Loader2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format, formatDistanceToNowStrict } from 'date-fns';
+import { formatDistanceToNowStrict } from 'date-fns';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
+import { es } from 'date-fns/locale';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 
 interface Props {
@@ -23,7 +25,7 @@ const SHAREABLE_STATUSES = new Set([
 ]);
 
 export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [loading, setLoading] = useState(false);
   const [revoking, setRevoking] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -167,12 +169,12 @@ export function SummaryShareControls({ leaseId, lifecycleStatus }: Props) {
             <span className="flex items-center gap-3">
               {generatedAt && (
                 <span>
-                  {t('workflow.share.generated', { date: format(new Date(generatedAt), 'MMM d, yyyy') })}
+                  {t('workflow.share.generated', { date: formatLocalizedDate(generatedAt, language) })}
                 </span>
               )}
               {expiresAt && (
                 <span>
-                  {t('workflow.share.expires_in', { duration: formatDistanceToNowStrict(new Date(expiresAt)) })}
+                  {t('workflow.share.expires_in', { duration: formatDistanceToNowStrict(new Date(expiresAt), { locale: language === 'es' ? es : undefined }) })}
                 </span>
               )}
             </span>

@@ -290,7 +290,8 @@ function Watchlist({ flags }: { flags: WatchFlag[] }) {
 
 export default function Portfolio() {
   const { t, language } = useLanguage();
-  const { workspace, canAccessFeature } = useApp();
+  const { workspace, canAccessFeature, userRole } = useApp();
+  const isAdminRole = userRole === 'admin' || userRole === 'owner';
   const formatCurrency = (value: number | null | undefined) => formatLocalizedCurrency(value, language);
 
   // KNOWN_ISSUES #46: Portfolio is a Business-tier feature; gate + skip the
@@ -369,9 +370,15 @@ export default function Portfolio() {
               <p className="mb-6 max-w-md text-sm text-muted-foreground">
                 {t('portfolio.business_gate_desc')}
               </p>
-              <Button variant="accent" size="lg" asChild>
-                <Link to="/app/settings/account?tab=billing">{t('integrations.upgrade_business')}</Link>
-              </Button>
+              {/* Wave 5: only admins can act on Billing — the CTA was a
+                  two-click dead-end for editors/viewers. */}
+              {isAdminRole ? (
+                <Button variant="accent" size="lg" asChild>
+                  <Link to="/app/settings/account?tab=billing">{t('integrations.upgrade_business')}</Link>
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('usage.ask_admin_upgrade')}</p>
+              )}
             </CardContent>
           </Card>
         </PageLayout>

@@ -13,6 +13,11 @@ import {
   NO_SUBSCRIPTION_ERROR,
   NO_SUBSCRIPTION_REASON,
 } from "../_shared/monetization.ts";
+import {
+  callerCanProcessLeases,
+  READ_ONLY_ROLE_ERROR,
+  READ_ONLY_ROLE_REASON,
+} from "../_shared/role_gate.ts";
 
 // Azure Document Intelligence (OCR layer)
 const AZURE_DI_ENDPOINT = Deno.env.get('AZURE_DI_ENDPOINT');
@@ -585,6 +590,19 @@ serve(async (req) => {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
+    }
+
+    // Wave 5 viewer gate: canRetry admits the lease's own creator — but if
+    // that user's role has since been reduced to viewer, a retry would still
+    // burn paid Opus from a "read-only" seat. Same shared gate as
+    // process_lease so the two paid-AI entry points stay in lockstep
+    // (mirrors the monetization pairing). Workspace-less personal leases
+    // have no role to check and pass through.
+    if (lease.workspace_id && !(await callerCanProcessLeases(supabaseAdmin, lease.workspace_id, user.id))) {
+      return new Response(
+        JSON.stringify({ error: READ_ONLY_ROLE_ERROR, reason: READ_ONLY_ROLE_REASON }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
     }
 
     // Integrity gate: retry / re-upload only operates on FAILED leases. The

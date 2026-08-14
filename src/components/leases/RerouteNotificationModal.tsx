@@ -12,7 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { localizedStatusLabel } from '@/lib/lifecycleLabels';
-import { format } from 'date-fns';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 import { ArrowDown, GitBranch, Shield } from 'lucide-react';
 import {
   Dialog,
@@ -56,7 +56,7 @@ export function RerouteNotificationModal({
   userId,
 }: Props) {
   const { user } = useApp();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [unseenEvent, setUnseenEvent] = useState<RerouteEventLite | null>(null);
   const [open, setOpen] = useState(false);
 
@@ -142,7 +142,7 @@ export function RerouteNotificationModal({
         <div className="space-y-3 text-sm">
           <div>
             <p className="text-xs text-muted-foreground">{t('leases.reroute.when')}</p>
-            <p>{format(new Date(unseenEvent.triggered_at), 'MMM d, yyyy h:mm a')}</p>
+            <p>{formatLocalizedDateTime(unseenEvent.triggered_at, language)}</p>
           </div>
 
           <div>

@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useParams, useNavigate, useSearchParams, Link } from "react-router-dom";
-import { format } from "date-fns";
 import {
   FileText,
   CheckCircle,
@@ -78,7 +77,7 @@ import { ScrollableTabStrip, UNDERLINE_TAB_TRIGGER } from '@/components/ui/scrol
 import { downloadCSV } from "@/components/leases/LeaseExports";
 import { LeaseReviewStatusStrip } from "@/components/leases/LeaseReviewStatusStrip";
 import { useLanguage } from "@/contexts/LanguageContext";
-import { formatLocalizedCurrency } from "@/lib/dateFormatters";
+import { formatLocalizedCurrency, formatLocalizedDate } from "@/lib/dateFormatters";
 import { RentScheduleTable, type RentScheduleEntry } from "@/components/leases/RentScheduleTable";
 import { UploadAmendmentDialog } from "@/components/leases/UploadAmendmentDialog";
 import { AmendmentsList } from "@/components/leases/AmendmentsList";
@@ -234,7 +233,19 @@ export default function LeaseReview() {
   // covers BOTH the Vault retention tier AND the cancellation grace /
   // soft-delete window (whose plan is still starter/business but whose writes
   // the server RLS rejects) — previously this missed grace users.
-  const isReadOnly = isWorkspaceReadOnly(workspace);
+  //
+  // Wave 5 (honest walls): VIEWER-role members get the same read-only
+  // treatment. Before this, the workbench was role-blind — a viewer saw
+  // editable fields and an Approve action whose UPDATE the RLS editor gate
+  // silently filtered to 0 rows, then a green success toast over a write the
+  // database discarded. Riding the Vault plumbing gives viewers the complete,
+  // honest read-only experience through every gate below in one place.
+  const isViewerRole = userRole === 'viewer';
+  const isReadOnly = isWorkspaceReadOnly(workspace) || isViewerRole;
+  // The note names the actual cause: workspace state wins over role framing.
+  const readOnlyNoteKey = isWorkspaceReadOnly(workspace)
+    ? 'readonly.lease_note'
+    : 'readonly.viewer_note';
   const [tier2CorrectionOpen, setTier2CorrectionOpen] = useState(false);
   const [showAmendmentDialog, setShowAmendmentDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
@@ -718,7 +729,7 @@ export default function LeaseReview() {
     if (!lease || !user) return;
     setSavingEdits(true);
     try {
-      const { error } = await supabase
+      const { data: editRows, error } = await supabase
         .from('leases')
         .update({
           request_title: requestEdits.request_title || null,
@@ -737,9 +748,15 @@ export default function LeaseReview() {
           vendor_zip: (requestEdits.vendor_zip || null) as any,
           vendor_phone: (requestEdits.vendor_phone || null) as any,
         } as any)
-        .eq('id', lease.id);
+        .eq('id', lease.id)
+        // Wave 5: fail on RLS-filtered zero-row writes instead of showing a
+        // saved state the database discarded.
+        .select('id');
 
       if (error) throw error;
+      if (!editRows || editRows.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
 
       await supabase.from('lease_activity_log').insert({
         lease_id: lease.id,
@@ -1366,11 +1383,14 @@ export default function LeaseReview() {
     const prevConfirmed = confirmedSections;
     setConfirmedSections(newConfirmed);
     if (lease?.id) {
-      const { error } = await supabase
+      // Wave 5: .select() so an RLS-filtered write (0 rows, no error) also
+      // reverts — PostgREST reports success on zero-row updates.
+      const { data: savedRows, error } = await supabase
         .from('leases')
         .update({ confirmed_sections: newConfirmed })
-        .eq('id', lease.id);
-      if (error) {
+        .eq('id', lease.id)
+        .select('id');
+      if (error || !savedRows || savedRows.length === 0) {
         // #85: the write was rejected (e.g. Vault/grace read-only RLS) — revert
         // the optimistic state instead of leaving the UI claiming a saved review.
         setConfirmedSections(prevConfirmed);
@@ -1848,12 +1868,20 @@ export default function LeaseReview() {
         _approval: approvalMetadata,
       };
 
-      const { error } = await supabase
+      // Wave 5: .select() so an RLS-filtered write (0 rows) FAILS instead of
+      // masquerading as success — the "green toast over a discarded approval"
+      // silent lie from the Wave-4 persona sweep. Belt-and-suspenders under the
+      // viewer read-only gate above.
+      const { data: approvedRows, error } = await supabase
         .from("leases")
         .update(updateData)
-        .eq("id", lease.id);
+        .eq("id", lease.id)
+        .select("id");
 
       if (error) throw error;
+      if (!approvedRows || approvedRows.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
 
       // Mirror the approval into the canonical audit log (previously only
       // persisted inside extracted_json._approval, which is overwritable by
@@ -2190,7 +2218,7 @@ export default function LeaseReview() {
                 </div>
               </div>
               {isReadOnly ? (
-                <p className="text-sm text-muted-foreground pl-8">{t('readonly.lease_note')}</p>
+                <p className="text-sm text-muted-foreground pl-8">{t(readOnlyNoteKey)}</p>
               ) : isRequestor || isAdminUser ? (
                 <div className="flex items-center gap-3 pl-8">
                   <Button onClick={handleRetryRouting} disabled={retryingRouting}>
@@ -2241,7 +2269,11 @@ export default function LeaseReview() {
                     silently rejected by the prevent_unauthorized_lease_workflow_edits
                     trigger anyway. Approvals go through the Approval Queue; executed
                     status comes from uploading the executed document. */}
-                {!isReadOnly && lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
+                {/* Wave 5: gated like the sibling Nudge button — the server
+                    (legacy-lease-action) only allows the requestor or an
+                    admin to cancel; anyone else got a confirm dialog followed
+                    by a raw non-2xx error. */}
+                {!isReadOnly && (isRequestor || isAdminUser) && lifecycleStatus && !['active', 'expired', 'cancelled', 'rejected'].includes(lifecycleStatus) && (
                   <Button
                     variant="outline"
                     className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive"
@@ -2261,7 +2293,7 @@ export default function LeaseReview() {
           {/* #137: read-only note as a standalone caption under the header, not
               wedged into the actions button-row (cramped at narrow widths). */}
           {isReadOnly && (
-            <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
+            <p className="text-sm text-muted-foreground">{t(readOnlyNoteKey)}</p>
           )}
 
           {/* Role-aware next-step guidance. #137: suppressed under read-only —
@@ -2555,7 +2587,7 @@ export default function LeaseReview() {
                 )}
 
                 {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
+                  <p className="text-sm text-muted-foreground">{t(readOnlyNoteKey)}</p>
                 )}
               </CardContent>
           </Card>
@@ -2593,7 +2625,7 @@ export default function LeaseReview() {
                   <div>
                     <p className="text-xs text-muted-foreground">{t('lease_review.intake.start_date')}</p>
                     <p className="font-medium">
-                      {lease.lease_start ? format(new Date(lease.lease_start), 'MMM d, yyyy') : '\u2014'}
+                      {lease.lease_start ? formatLocalizedDate(lease.lease_start, language) : '\u2014'}
                     </p>
                   </div>
                   <div>
@@ -2602,7 +2634,7 @@ export default function LeaseReview() {
                       {lease.lease_start && lease.term_months ? (() => {
                         const end = new Date(lease.lease_start);
                         end.setMonth(end.getMonth() + Number(lease.term_months));
-                        return format(end, 'MMM d, yyyy');
+                        return formatLocalizedDate(end, language);
                       })() : '\u2014'}
                     </p>
                   </div>
@@ -3090,7 +3122,7 @@ export default function LeaseReview() {
                     (executed / active-unlocked / needs-review / archived) are
                     not silently action-less. */}
                 {isReadOnly && (
-                  <p className="text-sm text-muted-foreground">{t('readonly.lease_note')}</p>
+                  <p className="text-sm text-muted-foreground">{t(readOnlyNoteKey)}</p>
                 )}
                 {/* Primary action — state-aware, visually dominant.
                     font-semibold + shadow + slight x-padding pull the
@@ -3356,15 +3388,15 @@ export default function LeaseReview() {
                     </div>
                   )}
                   {Array.isArray(extractedJson?._tier2_warnings) && extractedJson._tier2_warnings.length > 0 && (
-                    <div className="rounded-lg border border-blue-300 bg-blue-50 p-4">
+                    <div className="rounded-lg border border-blue-300 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/20 p-4">
                       <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-blue-600 mt-0.5 shrink-0" />
+                        <AlertTriangle className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-blue-800 text-sm mb-1">{t('lease_review.banners.tier2_title')}</h4>
-                          <p className="text-xs text-blue-700/80 mb-2">
+                          <h4 className="font-semibold text-blue-800 dark:text-blue-300 text-sm mb-1">{t('lease_review.banners.tier2_title')}</h4>
+                          <p className="text-xs text-blue-700/80 dark:text-blue-400/80 mb-2">
                             {t('lease_review.banners.tier2_body')}
                           </p>
-                          <ul className="text-sm text-blue-700 space-y-1">
+                          <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
                             {extractedJson._tier2_warnings.map((warning, i) => (
                               <li key={i} className="flex items-start gap-2">
                                 <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-500" />
@@ -3386,12 +3418,12 @@ export default function LeaseReview() {
                     </div>
                   )}
                   {Array.isArray(extractedJson?._validation_warnings) && extractedJson._validation_warnings.length > 0 && (
-                    <div className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+                    <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 p-4">
                       <div className="flex items-start gap-3">
-                        <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                        <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
                         <div className="flex-1">
-                          <h4 className="font-semibold text-amber-800 text-sm mb-1">{t('lease_review.banners.validation_title')}</h4>
-                          <ul className="text-sm text-amber-700 space-y-1">
+                          <h4 className="font-semibold text-amber-800 dark:text-amber-300 text-sm mb-1">{t('lease_review.banners.validation_title')}</h4>
+                          <ul className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
                             {extractedJson._validation_warnings.map((warning, i) => (
                               <li key={i} className="flex items-center gap-2">
                                 <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
@@ -3506,13 +3538,15 @@ export default function LeaseReview() {
                                   <div>
                                     <Label className="text-[10px] uppercase text-blue-600">{t('review.monthly_rent')}</Label>
                                     <p className="font-medium">
-                                      ${parentLease.current_monthly_rent?.toLocaleString() || parentLease.base_rent_amount || t('review.confidence.na')}
+                                      {parentLease.current_monthly_rent != null
+                                        ? formatLocalizedCurrency(Number(parentLease.current_monthly_rent), language)
+                                        : parentLease.base_rent_amount || t('review.confidence.na')}
                                     </p>
                                   </div>
                                   <div>
                                     <Label className="text-[10px] uppercase text-blue-600">{t('review.lease_end')}</Label>
                                     <p className="font-medium">
-                                      {parentLease.lease_end ? format(new Date(parentLease.lease_end), 'MMM d, yyyy') : t('review.confidence.na')}
+                                      {parentLease.lease_end ? formatLocalizedDate(parentLease.lease_end, language) : t('review.confidence.na')}
                                     </p>
                                   </div>
                                 </CardContent>
@@ -3541,7 +3575,7 @@ export default function LeaseReview() {
                                         <> {t('lease_review.unlock.reason', { reason: pendingUnlockRequest.request_reason })}</>
                                       )}
                                       {pendingUnlockRequest.created_at && (
-                                        <> {t('lease_review.unlock.submitted_date', { date: new Date(pendingUnlockRequest.created_at).toLocaleDateString() })}</>
+                                        <> {t('lease_review.unlock.submitted_date', { date: formatLocalizedDate(pendingUnlockRequest.created_at, language) })}</>
                                       )}
                                     </p>
                                   </div>
@@ -3811,7 +3845,7 @@ export default function LeaseReview() {
                           (lease.lifecycle_status === 'pending_counter_signature' ||
                             lease.lifecycle_status === 'chain_violation') && (
                             <p className="text-sm text-muted-foreground">
-                              {t('readonly.lease_note')}
+                              {t(readOnlyNoteKey)}
                             </p>
                           )}
                         {!isReadOnly && lease.lifecycle_status === 'pending_counter_signature' && (

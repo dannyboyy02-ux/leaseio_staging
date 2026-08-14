@@ -38,7 +38,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import { format } from 'date-fns';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 
 interface ImportRow {
   id: string;
@@ -50,6 +50,7 @@ interface ImportRow {
   storage_path: string | null;
   lifecycle_status: string | null;
   model_locked: boolean | null;
+  user_id: string | null;
 }
 
 // #116: a "committed" lease (model_locked, or any lifecycle_status beyond
@@ -66,7 +67,14 @@ export default function ImportHistory() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { t, language } = useLanguage();
-  const { workspace } = useApp();
+  const { workspace, user, userRole } = useApp();
+  // Wave 5: the hard-delete is RLS-gated to own-lease-or-admin
+  // (leases_delete_own_or_workspace_admin). Rendering it for everyone let a
+  // non-owner click Delete, see a success toast, and watch the row come back
+  // on refetch (RLS filtered the DELETE to 0 rows). Only show the action to
+  // callers the policy will actually allow.
+  const canDeleteRow = (imp: ImportRow) =>
+    userRole === 'admin' || userRole === 'owner' || (!!imp.user_id && imp.user_id === user?.id);
   const quota = useWorkspaceQuota();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
   const [limitWallOpen, setLimitWallOpen] = useState(false);
@@ -93,7 +101,7 @@ export default function ImportHistory() {
       // Workspace scoping mandatory — see Leases.tsx for the same rationale.
       const { data, error } = await supabase
         .from('leases')
-        .select('id, filename, status, uploaded_at, processed_at, error_message, storage_path, lifecycle_status, model_locked')
+        .select('id, filename, status, uploaded_at, processed_at, error_message, storage_path, lifecycle_status, model_locked, user_id')
         .eq('workspace_id', workspace.id)
         .order('uploaded_at', { ascending: false });
 
@@ -195,12 +203,18 @@ export default function ImportHistory() {
         console.warn('Risks delete warning:', risksError);
       }
 
-      const { error: leaseError } = await supabase
+      // Wave 5: .select() so an RLS-filtered DELETE (0 rows, no error) fails
+      // loudly instead of toasting success over a row that reappears on refetch.
+      const { data: deletedRows, error: leaseError } = await supabase
         .from('leases')
         .delete()
-        .eq('id', selectedLease.id);
+        .eq('id', selectedLease.id)
+        .select('id');
 
       if (leaseError) throw leaseError;
+      if (!deletedRows || deletedRows.length === 0) {
+        throw new Error(String(t('readonly.write_rejected')));
+      }
 
       toast.success(t('import.delete_success'));
       setDeleteDialogOpen(false);
@@ -313,7 +327,7 @@ export default function ImportHistory() {
                           </div>
                         </TableCell>
                         <TableCell className="text-muted-foreground">
-                          {format(new Date(imp.uploaded_at), 'MMM d, yyyy h:mm a')}
+                          {formatLocalizedDateTime(imp.uploaded_at, language)}
                         </TableCell>
                         <TableCell className="text-muted-foreground">
                           {imp.status === 'Failed' ? (
@@ -332,7 +346,7 @@ export default function ImportHistory() {
                               {t('import.retry')}
                             </Button>
                           ) : imp.processed_at ? (
-                            format(new Date(imp.processed_at), 'MMM d, yyyy h:mm a')
+                            formatLocalizedDateTime(imp.processed_at, language)
                           ) : (
                             '—'
                           )}
@@ -364,7 +378,7 @@ export default function ImportHistory() {
                                 </TooltipTrigger>
                                 <TooltipContent>{t('import.archive_committed')}</TooltipContent>
                               </Tooltip>
-                            ) : (
+                            ) : canDeleteRow(imp) ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
                                   <Button
@@ -378,7 +392,7 @@ export default function ImportHistory() {
                                 </TooltipTrigger>
                                 <TooltipContent>{t('import.delete')}</TooltipContent>
                               </Tooltip>
-                            )}
+                            ) : null}
                           </div>
                         </TableCell>
                       </TableRow>

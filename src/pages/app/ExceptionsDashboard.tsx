@@ -16,7 +16,9 @@ import { useEffect, useState } from 'react';
 import { stageLabel } from '@/lib/lifecycleStates';
 import { localizedStageLabel } from '@/lib/lifecycleLabels';
 import { useNavigate } from 'react-router-dom';
-import { format, formatDistance } from 'date-fns';
+import { formatDistance } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { formatLocalizedDate, formatLocalizedDateTime } from '@/lib/dateFormatters';
 import {
   AlertOctagon,
   AlertTriangle,
@@ -75,7 +77,7 @@ interface OOORow {
 }
 
 export default function ExceptionsDashboard() {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const { workspace, userRole } = useApp();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -269,7 +271,7 @@ export default function ExceptionsDashboard() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium truncate">{r.lease_title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {t('exceptions.detected_time', { time: formatDistance(new Date(r.created_at), new Date(), { addSuffix: true }) })}
+                          {t('exceptions.detected_time', { time: formatDistance(new Date(r.created_at), new Date(), { addSuffix: true, locale: language === 'es' ? es : undefined }) })}
                           {' · '}
                           {t('exceptions.days_stuck_in', {
                             days: r.details?.days_stuck ?? '?',
@@ -310,7 +312,7 @@ export default function ExceptionsDashboard() {
                             ? t('exceptions.reason_delegate_inactive')
                             : t('exceptions.reason_manual')}
                           {' · '}
-                          {formatDistance(new Date(r.created_at), new Date(), { addSuffix: true })}
+                          {formatDistance(new Date(r.created_at), new Date(), { addSuffix: true, locale: language === 'es' ? es : undefined })}
                         </p>
                       </div>
                       <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -346,7 +348,7 @@ export default function ExceptionsDashboard() {
                             </Badge>
                           </div>
                           <p className="text-xs text-muted-foreground mt-0.5">
-                            {format(new Date(r.override_at), 'MMM d, yyyy h:mm a')}
+                            {formatLocalizedDateTime(r.override_at, language)}
                             {r.override_by_name && ` · ${t('exceptions.by_name', { name: r.override_by_name })}`}
                           </p>
                           <p className="text-xs italic mt-1 line-clamp-2">"{r.override_reason}"</p>
@@ -377,7 +379,7 @@ export default function ExceptionsDashboard() {
                         <strong>{r.delegate_name ?? t('exceptions.unknown_user')}</strong>
                       </p>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        {format(new Date(r.starts_at), 'MMM d')} → {format(new Date(r.ends_at), 'MMM d, yyyy')}
+                        {formatLocalizedDate(r.starts_at, language, { month: 'short', day: 'numeric' })} → {formatLocalizedDate(r.ends_at, language)}
                         {r.reason && ` · ${r.reason}`}
                       </p>
                     </div>

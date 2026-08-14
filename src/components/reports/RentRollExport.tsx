@@ -183,6 +183,12 @@ export function RentRollExport() {
           )}
           {isExporting ? t('reports.generating') : t('reports.download_rent_roll')}
         </Button>
+        {/* Wave 5: a permanently-disabled button with no explanation reads as
+            broken. Say WHY it's disabled (the toast this string lived in was
+            unreachable — a disabled button can't fire it). */}
+        {!canExport && (
+          <p className="text-xs text-muted-foreground mt-2">{t('reports.export_restricted')}</p>
+        )}
       </CardContent>
     </Card>
   );

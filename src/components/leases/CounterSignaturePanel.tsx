@@ -23,7 +23,7 @@ import {
   Upload,
   UserCog,
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -102,7 +102,7 @@ export function CounterSignaturePanel({
   onChanged,
 }: CounterSignaturePanelProps) {
   const { user, userRole } = useApp();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
 
   const [ownerName, setOwnerName] = useState<string | null>(null);
   const [members, setMembers] = useState<MemberOption[]>([]);
@@ -269,11 +269,11 @@ export function CounterSignaturePanel({
   const dueDateFmt = useMemo(() => {
     if (!dueDate) return '—';
     try {
-      return format(new Date(dueDate), 'MMM d, yyyy');
+      return formatLocalizedDate(dueDate, language);
     } catch {
       return dueDate;
     }
-  }, [dueDate]);
+  }, [dueDate, language]);
 
   if (!visible) return null;
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
@@ -31,12 +31,19 @@ import { useWorkspaceQuota } from '@/hooks/useWorkspaceQuota';
 import { getExtractedFieldValue } from '@/lib/extractedFieldHelpers';
 
 export default function Dashboard() {
-  const { user, workspace } = useApp();
+  const { user, workspace, userRole } = useApp();
   // #136/#137: hide intake entry points for ANY read-only workspace — Vault OR
   // a cancellation-grace/soft-deleted one (the server also blocks the write).
-  const isReadOnly = isWorkspaceReadOnly(workspace);
+  // Wave 5: VIEWER-role members are read-only too — the server now rejects
+  // their lease creation (INSERT policy + process_lease role gate), so the
+  // intake CTAs must not render for them.
+  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer';
   const { t } = useAppTranslation();
   const navigate = useNavigate();
+  // Wave 5: RequireRole bounces denied deep-links here with the path in
+  // location.state — explain the bounce instead of looking like a broken link.
+  const location = useLocation();
+  const deniedPath = (location.state as { deniedPath?: string } | null)?.deniedPath;
   const quota = useWorkspaceQuota();
   // Shared react-query cache with the NeedsAction card — no extra fetch.
   // Defaults to the empty-state layout during load (not the 3-col grid) so a
@@ -121,6 +128,11 @@ export default function Dashboard() {
       />
 
       <PageLayout width="wide">
+        {deniedPath && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">
+            {t('dashboard.access_denied_notice')}
+          </div>
+        )}
         {firstRun ? (
           // First run (0 leases): ONE hero with the Add-Lease chooser, FIRST —
           // the screen's primary gesture renders above the fold; the checklist

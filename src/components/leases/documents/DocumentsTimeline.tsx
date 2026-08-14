@@ -6,7 +6,6 @@
 //
 // Pure presentation. The parent owns data fetching + refresh.
 
-import { format } from 'date-fns';
 import { Download, FileText, Loader2, Star } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,6 +16,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import i18next from 'i18next';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 
 export interface DocumentRow {
   id: string;
@@ -63,7 +63,7 @@ async function downloadDocument(doc: DocumentRow) {
 }
 
 export function DocumentsTimeline({ documents, loading = false }: Props) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -124,7 +124,7 @@ export function DocumentsTimeline({ documents, loading = false }: Props) {
                   })}
                 </span>
                 {doc.uploader_name && <span>{doc.uploader_name}</span>}
-                <span>{format(new Date(doc.uploaded_at), 'MMM d, yyyy h:mm a')}</span>
+                <span>{formatLocalizedDateTime(doc.uploaded_at, language)}</span>
                 {doc.file_size_bytes != null && (
                   <span>{formatFileSize(doc.file_size_bytes)}</span>
                 )}

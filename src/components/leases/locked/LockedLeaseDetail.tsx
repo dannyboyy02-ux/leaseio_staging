@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { format } from 'date-fns';
-import { parseToLocalDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { parseToLocalDate, formatLocalizedDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
 import { parseSingleCurrencyAmount } from '@/lib/securityDeposit';
 import { localizedAssetTypeName } from '@/lib/assetTypeLabels';
 import { useLanguage } from '@/contexts/LanguageContext';
@@ -65,8 +64,8 @@ interface Props {
   onAscDirtyChange?: (dirty: boolean) => void;
 }
 
-const fmtDate = (d: string | null | undefined) =>
-  d ? format(parseToLocalDate(d), 'MMM d, yyyy') : null;
+const fmtDate = (d: string | null | undefined, language: SupportedLocale) =>
+  d ? formatLocalizedDate(d, language) : null;
 
 const fmtCurrency = (n: number | null | undefined, language: SupportedLocale, currency = 'USD') =>
   n == null ? null : formatLocalizedCurrency(n, language, { currency });
@@ -453,13 +452,13 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false, onAsc
       ? null
       : `${months} ${months === 1 ? t('locked_lease.rent.month') : t('locked_lease.rent.months')}`;
     return [
-      { label: t('locked_lease.timing.commencement'), value: fmtDate(lease.lease_start) },
-      { label: t('locked_lease.timing.rent_commencement'), value: fmtDate(lease.rent_commencement_date) },
-      { label: t('locked_lease.timing.expiration'), value: fmtDate(lease.lease_end) },
+      { label: t('locked_lease.timing.commencement'), value: fmtDate(lease.lease_start, language) },
+      { label: t('locked_lease.timing.rent_commencement'), value: fmtDate(lease.rent_commencement_date, language) },
+      { label: t('locked_lease.timing.expiration'), value: fmtDate(lease.lease_end, language) },
       { label: t('locked_lease.timing.term_months'), value: lease.term_months },
       { label: t('locked_lease.timing.remaining'), value: remaining },
       { label: t('locked_lease.timing.month_to_month'), value: fmtBool(lease.month_to_month, t) },
-      { label: t('locked_lease.timing.approved'), value: fmtDate(lease.financial_approved_at) },
+      { label: t('locked_lease.timing.approved'), value: fmtDate(lease.financial_approved_at, language) },
     ];
   }, [lease, t]);
 
@@ -496,7 +495,7 @@ export function LockedLeaseDetail({ lease, refetchLease, readOnly = false, onAsc
   const escalationRows: LabelValueRow[] = useMemo(() => [
     { label: t('locked_lease.escalations.rate'), value: fmtPercent(lease.escalation_rate) },
     { label: t('locked_lease.escalations.clauses'), value: lease.escalation_clauses, fullWidth: true },
-  ], [lease, t]);
+  ], [lease, t, language]);
 
   const optionsRows: LabelValueRow[] = useMemo(() => {
     const purchaseOption = extractedValue(extracted, 'purchase_option');

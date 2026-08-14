@@ -884,6 +884,7 @@
   },
   "dashboard": {
     "welcome_back": "Welcome back",
+    "access_denied_notice": "You don't have permission to view that page — ask a workspace admin if you need access.",
     "first_run_title": "Add your first lease",
     "first_run_desc": "Request approval for a new lease, or upload a signed document — the AI abstracts the key terms and your dashboard fills in from there.",
     "upload_lease": "Upload Lease",
@@ -2855,6 +2856,7 @@
   "common": {
     "confirm": "Confirm",
     "cancel": "Cancel",
+    "no_results": "No results.",
     "undo": "Undo",
     "more_actions": "More actions",
     "save": "Save",
@@ -3663,7 +3665,9 @@
     "member_wall_switch": "Switch workspace"
   },
   "readonly": {
-    "lease_note": "This workspace is read-only — you can view and export, but editing, approvals, and uploads are disabled."
+    "lease_note": "This workspace is read-only — you can view and export, but editing, approvals, and uploads are disabled.",
+    "viewer_note": "Your role in this workspace is view-only — you can view and export, but editing, approvals, and uploads are disabled.",
+    "write_rejected": "Your change wasn't saved — you don't have permission to edit this lease."
   },
   "routing_failed": {
     "title": "Approval routing didn't finish",

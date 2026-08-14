@@ -9,8 +9,8 @@ import { cn } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Skeleton } from '@/components/ui/skeleton';
-import { differenceInDays, format } from 'date-fns';
-import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { differenceInDays } from 'date-fns';
+import { formatLocalizedCurrency, formatLocalizedDate, formatLocalizedDateLong, formatLocalizedMonthYear, type SupportedLocale } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useApp } from '@/contexts/AppContext';
 import { getPropertyDisplayName } from '@/lib/extractedFieldHelpers';
@@ -324,7 +324,7 @@ export function UpcomingEvents() {
                 >
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
-                <span className="text-sm font-medium">{format(calendarMonth, 'MMMM yyyy')}</span>
+                <span className="text-sm font-medium">{formatLocalizedMonthYear(calendarMonth, language as SupportedLocale)}</span>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -405,7 +405,7 @@ export function UpcomingEvents() {
                 });
                 return (
                   <div className="border rounded-lg p-3 space-y-2 bg-muted/30">
-                    <p className="text-xs font-medium">{format(selectedDay, 'MMMM d, yyyy')}</p>
+                    <p className="text-xs font-medium">{formatLocalizedDateLong(selectedDay, language as SupportedLocale)}</p>
                     {dayEvents.map((event) => {
                       const config = eventConfig[event.type];
                       const EventIcon = config.icon;
@@ -499,7 +499,7 @@ export function UpcomingEvents() {
                                 </div>
                               </div>
                               <span className="text-xs text-muted-foreground shrink-0">
-                                {format(event.date, 'MMM d')}
+                                {formatLocalizedDate(event.date, language as SupportedLocale, { month: 'short', day: 'numeric' })}
                               </span>
                             </Link>
                             <button
@@ -568,7 +568,7 @@ export function UpcomingEvents() {
                     )}
                   </div>
                 </div>
-                <span className="text-xs text-muted-foreground shrink-0">{format(event.date, 'MMM d')}</span>
+                <span className="text-xs text-muted-foreground shrink-0">{formatLocalizedDate(event.date, language as SupportedLocale, { month: 'short', day: 'numeric' })}</span>
               </Link>
             );
           })}

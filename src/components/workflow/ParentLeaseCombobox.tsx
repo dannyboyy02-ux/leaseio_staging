@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Check, ChevronsUpDown, FileText } from 'lucide-react';
-import { format } from 'date-fns';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import {
@@ -33,7 +33,7 @@ export function ParentLeaseCombobox({
   disabled = false 
 }: ParentLeaseComboboxProps) {
   const { workspace } = useApp();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [open, setOpen] = useState(false);
   const [leases, setLeases] = useState<PostedLease[]>([]);
   const [loading, setLoading] = useState(false);
@@ -83,7 +83,7 @@ export function ParentLeaseCombobox({
                 <p className="text-xs text-muted-foreground truncate">
                   {selectedLease.tenant_name || t('workflow.parent_lease.no_tenant')} •
                   {selectedLease.lease_end
-                    ? ` ${t('workflow.parent_lease.ends', { date: format(new Date(selectedLease.lease_end), 'MMM yyyy') })}`
+                    ? ` ${t('workflow.parent_lease.ends', { date: formatLocalizedDate(selectedLease.lease_end, language, { month: 'short', year: 'numeric' }) })}`
                     : ` ${t('workflow.parent_lease.no_end_date')}`
                   }
                 </p>
@@ -129,7 +129,7 @@ export function ParentLeaseCombobox({
                     </p>
                     {lease.lease_end && (
                       <p className="text-xs text-muted-foreground">
-                        {t('workflow.parent_lease.ends_colon', { date: format(new Date(lease.lease_end), 'MMM d, yyyy') })}
+                        {t('workflow.parent_lease.ends_colon', { date: formatLocalizedDate(lease.lease_end, language) })}
                       </p>
                     )}
                   </div>

@@ -130,7 +130,9 @@ export default function Leases() {
   const { workspace, user, userRole, refreshProfile, isLoading: appLoading } = useApp();
   // #136/#137: hide intake/archive affordances for ANY read-only workspace —
   // Vault OR a cancellation-grace/soft-deleted one (the server also blocks).
-  const isReadOnly = isWorkspaceReadOnly(workspace);
+  // Wave 5: VIEWER-role members are read-only too (INSERT policy +
+  // process_lease role gate now reject their intake server-side).
+  const isReadOnly = isWorkspaceReadOnly(workspace) || userRole === 'viewer';
   // Archive is admin/owner-only (server-enforced by the #78 trigger).
   const isAdmin = userRole === 'admin' || userRole === 'owner';
   const [searchParams] = useSearchParams();
@@ -558,7 +560,7 @@ export default function Leases() {
         onClick={() => handleSort(key)}
       >
         {Icon && <Icon className="mr-2 h-4 w-4 shrink-0" />}
-        <span className="truncate">{label}</span>
+        <span className="truncate" title={label}>{label}</span>
         <span className="ml-1 shrink-0">{getSortIcon(key)}</span>
       </Button>
       {nextKey && (
@@ -769,7 +771,7 @@ export default function Leases() {
               </div>
               {/* Status — the single scope control (Active / Archived / All). */}
               <Select value={scope} onValueChange={(v) => setScope(v as StatusScope)}>
-                <SelectTrigger className="w-full sm:w-[150px]">
+                <SelectTrigger className="w-full sm:w-[190px]">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>

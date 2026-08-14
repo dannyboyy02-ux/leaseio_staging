@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { localizedAssetTypeName } from '@/lib/assetTypeLabels';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
-import { formatLocalizedDate } from '@/lib/dateFormatters';
+import { Link, useNavigate } from 'react-router-dom';
+import { formatLocalizedCurrency, formatLocalizedDate, type SupportedLocale } from '@/lib/dateFormatters';
 import {
   CheckCircle,
   XCircle,
@@ -20,6 +20,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+import { ScrollableTabStrip } from '@/components/ui/scrollable-tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
@@ -69,8 +70,8 @@ interface QueueLease {
   requestorName?: string;
 }
 
-const fmt = (n: number | null | undefined) =>
-  n != null ? `$${n.toLocaleString('en-US', { maximumFractionDigits: 0 })}` : '\u2014';
+const fmt = (n: number | null | undefined, language: SupportedLocale) =>
+  formatLocalizedCurrency(n, language);
 
 function LeaseQueueCard({
   lease,
@@ -146,7 +147,7 @@ function LeaseQueueCard({
           <div className="grid grid-cols-3 gap-2 text-xs">
             <div className="rounded-md bg-muted/60 p-2">
               <p className="text-muted-foreground">{t('approvals.queue.monthly')}</p>
-              <p className="font-semibold">{fmt(lease.monthly_payment)}</p>
+              <p className="font-semibold">{fmt(lease.monthly_payment, language)}</p>
             </div>
             <div className="rounded-md bg-muted/60 p-2">
               <p className="text-muted-foreground">{t('approvals.financial.term')}</p>
@@ -158,7 +159,7 @@ function LeaseQueueCard({
             </div>
             <div className="rounded-md bg-muted/60 p-2">
               <p className="text-muted-foreground">{t('approvals.queue.total_commitment')}</p>
-              <p className="font-semibold">{fmt(lease.calc_total_commitment)}</p>
+              <p className="font-semibold">{fmt(lease.calc_total_commitment, language)}</p>
             </div>
           </div>
 
@@ -389,12 +390,12 @@ function ChainStepCard({
           <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
             {step.monthly_payment != null && (
               <span>
-                <strong className="text-foreground">{fmt(step.monthly_payment)}</strong> /{t('common.per_month_short')}
+                <strong className="text-foreground">{fmt(step.monthly_payment, language)}</strong> /{t('common.per_month_short')}
               </span>
             )}
             {step.calc_total_commitment != null && (
               <span>
-                {t('approvals.queue.total')} <strong className="text-foreground">{fmt(step.calc_total_commitment)}</strong>
+                {t('approvals.queue.total')} <strong className="text-foreground">{fmt(step.calc_total_commitment, language)}</strong>
               </span>
             )}
             <span>{t('approvals.queue.submitted_on', { date: formatLocalizedDate(step.created_at, language) })}</span>
@@ -1459,7 +1460,14 @@ export default function ApprovalQueue() {
 
       <PageLayout width="narrow">
         <Tabs defaultValue="mine">
-          <TabsList className={`w-full sm:w-auto mb-6 grid sm:inline-flex ${showGovernanceTab ? 'grid-cols-4' : 'grid-cols-3'}`}>
+          {/* Wave 5: the old phone treatment (grid-cols-3/4, w-full) forced
+              every tab into an equal sliver — the Spanish labels ("Requiere mi
+              revisión", "Todas las pendientes") painted over each other at
+              375px. The shared ScrollableTabStrip (same wrapper LeaseReview
+              uses) lets tabs keep their natural width and scroll, with edge
+              fades cueing the overflow. */}
+          <ScrollableTabStrip className="mb-6">
+            <TabsList className="w-max">
             <TabsTrigger value="mine" className="gap-1.5">
               {t('approvals.queue.tab_mine')}
               {pendingCount > 0 && (
@@ -1480,7 +1488,8 @@ export default function ApprovalQueue() {
                 )}
               </TabsTrigger>
             )}
-          </TabsList>
+            </TabsList>
+          </ScrollableTabStrip>
 
           <TabsContent value="mine">{renderUnifiedMyReview()}</TabsContent>
           <TabsContent value="all">{renderList(allPending, true)}</TabsContent>
@@ -1488,6 +1497,17 @@ export default function ApprovalQueue() {
 
           {showGovernanceTab && (
             <TabsContent value="governance" className="space-y-6">
+              {/* Wave 5: the two admin governance dashboards had NO inbound
+                  link anywhere in the app (URL-only). This tab is their
+                  natural home. */}
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" asChild>
+                  <Link to="/app/admin/exceptions">{t('exceptions.title')}</Link>
+                </Button>
+                <Button size="sm" variant="outline" asChild>
+                  <Link to="/app/admin/reroute-audit">{t('exceptions.reroute.title')}</Link>
+                </Button>
+              </div>
               {governanceLoading ? (
                 <div className="space-y-3">{[1, 2].map((i) => <Skeleton key={i} className="h-24 w-full rounded-lg" />)}</div>
               ) : (
