@@ -37,6 +37,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useApp } from "@/contexts/AppContext";
 import { useAppTranslation } from "@/hooks/useAppTranslation";
+import { formatLocalizedDate } from "@/lib/dateFormatters";
 
 interface ActivityRow {
   id: string;
@@ -109,7 +110,7 @@ const ACTIVITY_LABELS: Record<string, string> = {
 };
 
 export default function AuditLog() {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const { workspace } = useApp();
 
   // Localized label for an activity type; unknown types render raw (dynamic
@@ -351,9 +352,9 @@ export default function AuditLog() {
                       <TableCell className="text-sm">
                         <div className="flex items-center gap-2">
                           <Calendar size={14} className="text-muted-foreground" />
-                          {format(new Date(row.created_at), 'MMM d, yyyy')}
+                          {formatLocalizedDate(row.created_at, language)}
                           <span className="text-muted-foreground">
-                            {format(new Date(row.created_at), 'h:mm a')}
+                            {formatLocalizedDate(row.created_at, language, { hour: 'numeric', minute: '2-digit' })}
                           </span>
                         </div>
                       </TableCell>

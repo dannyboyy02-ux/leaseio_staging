@@ -29,6 +29,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 
 interface Props {
   leaseId: string;
@@ -45,7 +46,7 @@ interface State {
 }
 
 export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [state, setState] = useState<State | null>(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(false);
@@ -295,11 +296,11 @@ export function LeaseDiscountRateCard({ leaseId, workspaceId, canEdit }: Props) 
               <p className="text-xs text-muted-foreground mt-2">
                 {state.setByLabel
                   ? t('leases.discount.set_at_by', {
-                      date: new Date(state.setAt).toLocaleString(),
+                      date: formatLocalizedDateTime(state.setAt, language),
                       name: state.setByLabel,
                     })
                   : t('leases.discount.set_at', {
-                      date: new Date(state.setAt).toLocaleString(),
+                      date: formatLocalizedDateTime(state.setAt, language),
                     })}
               </p>
             )}

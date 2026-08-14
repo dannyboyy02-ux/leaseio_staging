@@ -12,7 +12,7 @@
 import { useEffect, useState } from 'react';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { localizedStatusLabel } from '@/lib/lifecycleLabels';
-import { format } from 'date-fns';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 import { ChevronDown, ChevronUp, GitBranch, Shield } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -70,7 +70,7 @@ function formatAttrValue(v: unknown): string {
 }
 
 export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [events, setEvents] = useState<RerouteEvent[]>([]);
   const [policies, setPolicies] = useState<Map<string, PolicyMeta>>(new Map());
   const [users, setUsers] = useState<Map<string, string>>(new Map());
@@ -199,7 +199,7 @@ export function RerouteHistorySection({ leaseId }: RerouteHistorySectionProps) {
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {format(new Date(e.triggered_at), 'MMM d, yyyy h:mm a')} ·{' '}
+                    {formatLocalizedDateTime(e.triggered_at, language)} ·{' '}
                     {t('leases.reroute.triggered_by', { name: triggerName })}
                   </p>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs mt-1">

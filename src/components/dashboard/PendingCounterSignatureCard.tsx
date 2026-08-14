@@ -7,8 +7,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, ChevronRight } from 'lucide-react';
-import { format } from 'date-fns';
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -16,6 +14,7 @@ import { cn } from '@/lib/utils';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import { supabase } from '@/integrations/supabase/client';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import {
   counterSignatureUrgency,
   counterSignatureUrgencyLabel,
@@ -51,7 +50,7 @@ const URGENCY_TEXT: Record<CounterSignatureUrgency, string> = {
 };
 
 export function PendingCounterSignatureCard() {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const { workspace } = useApp();
   const navigate = useNavigate();
   const [rows, setRows] = useState<Row[]>([]);
@@ -125,7 +124,7 @@ export function PendingCounterSignatureCard() {
         {sorted.map((r) => {
           const urgency = counterSignatureUrgency(r.counter_signature_due_date ?? null);
           const dueFmt = r.counter_signature_due_date
-            ? format(new Date(r.counter_signature_due_date), 'MMM d')
+            ? formatLocalizedDate(r.counter_signature_due_date, language, { month: 'short', day: 'numeric' })
             : '—';
           const title =
             r.filename ||

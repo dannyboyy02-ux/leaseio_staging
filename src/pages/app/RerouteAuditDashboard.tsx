@@ -20,7 +20,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 import {
   AlertTriangle,
   ChevronRight,
@@ -81,7 +81,7 @@ interface AuditFinding {
 }
 
 export default function RerouteAuditDashboard() {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const { workspace, userRole } = useApp();
   const navigate = useNavigate();
   const [findings, setFindings] = useState<AuditFinding[]>([]);
@@ -307,7 +307,7 @@ export default function RerouteAuditDashboard() {
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-sm">{f.lease_title}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {t('exceptions.detected_time', { time: format(new Date(f.created_at), 'MMM d, yyyy h:mm a') })}
+                          {t('exceptions.detected_time', { time: formatLocalizedDateTime(f.created_at, language) })}
                         </p>
                         <div className="text-xs mt-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                           <span>

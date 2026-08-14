@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
+import { formatLocalizedDate } from '@/lib/dateFormatters';
 import { useApp } from '@/contexts/AppContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
@@ -42,7 +42,7 @@ interface AmendmentsListProps {
 export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false }: AmendmentsListProps) {
   const { userRole, refreshProfile } = useApp();
   const { user } = useAuth();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [amendments, setAmendments] = useState<Amendment[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingDelete, setPendingDelete] = useState<Amendment | null>(null);
@@ -186,7 +186,7 @@ export function AmendmentsList({ parentLeaseId, refreshTrigger, readOnly = false
                 <div className="flex-1 min-w-0">
                   <p className="font-medium text-sm truncate">{amendment.filename}</p>
                   <p className="text-xs text-muted-foreground">
-                    {t('amendments.uploaded_on', { date: format(new Date(amendment.uploaded_at), 'MMM d, yyyy') })}
+                    {t('amendments.uploaded_on', { date: formatLocalizedDate(amendment.uploaded_at, language) })}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 ml-3">

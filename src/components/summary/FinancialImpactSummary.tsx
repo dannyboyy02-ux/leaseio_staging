@@ -1,7 +1,6 @@
-import { format } from 'date-fns';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { localizedStatusLabel } from '@/lib/lifecycleLabels';
-import { formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate, formatLocalizedDateTime, type SupportedLocale } from '@/lib/dateFormatters';
 import { useLanguage } from '@/contexts/LanguageContext';
 
 export interface SummaryData {
@@ -55,19 +54,21 @@ function fmt(n: number, language: SupportedLocale) {
   return formatLocalizedCurrency(n, language);
 }
 
-function fmtDate(d: string) {
+// Wave 5: localized \u2014 this summary renders on the PUBLIC no-login share link,
+// where an es reader previously got English month names mid-Spanish-sentence.
+function fmtDate(d: string, language: SupportedLocale) {
   if (!d) return '\u2014';
   try {
-    return format(new Date(d + (d.length === 10 ? 'T12:00:00' : '')), 'MMM d, yyyy');
+    return formatLocalizedDate(new Date(d + (d.length === 10 ? 'T12:00:00' : '')), language);
   } catch {
     return d;
   }
 }
 
-function fmtDateTime(d: string) {
+function fmtDateTime(d: string, language: SupportedLocale) {
   if (!d) return '\u2014';
   try {
-    return format(new Date(d), 'MMM d, yyyy h:mm a');
+    return formatLocalizedDateTime(d, language);
   } catch {
     return d;
   }
@@ -222,7 +223,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
           </div>
           <div style={{ textAlign: 'right', fontSize: '13px', color: '#6b7280', flexShrink: 0 }}>
             <div>{t('workflow.summary.generated')}</div>
-            <div style={{ fontWeight: 600, color: '#374151' }}>{fmtDate(today)}</div>
+            <div style={{ fontWeight: 600, color: '#374151' }}>{fmtDate(today, language)}</div>
             {isDraft && (
               <div
                 style={{
@@ -253,7 +254,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
               [t('workflow.request.asset_type'), assetLabel],
               [t('workflow.request.vendor'), data.vendor || '\u2014'],
               [t('workflow.request.requesting_department'), data.requestingDepartment || '\u2014'],
-              [t('approval.submitted'), fmtDate(data.submittedAt)],
+              [t('approval.submitted'), fmtDate(data.submittedAt, language)],
               [t('lease.status'), data.lifecycleStatus ? localizedStatusLabel(data.lifecycleStatus as LifecycleStatus) : '\u2014'],
             ]}
           />
@@ -266,8 +267,8 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
             rows={[
               [t('workflow.request.monthly_payment'), data.monthlyPayment ? fmt(data.monthlyPayment, language) : '\u2014'],
               [t('workflow.summary.term'), data.termMonths ? t('workflow.impact.n_months', { count: data.termMonths }) : '\u2014'],
-              [t('workflow.summary.start_date'), fmtDate(data.startDate)],
-              [t('workflow.summary.end_date'), fmtDate(data.endDate)],
+              [t('workflow.summary.start_date'), fmtDate(data.startDate, language)],
+              [t('workflow.summary.end_date'), fmtDate(data.endDate, language)],
               [t('workflow.summary.annual_escalation'), data.escalationRate > 0 ? `${data.escalationRate}%` : t('workflow.summary.none')],
             ]}
           />
@@ -378,7 +379,7 @@ export function FinancialImpactSummary({ data, shareUrl, generatedAt }: Props) {
                   ? [[t('workflow.summary.approved_by'), data.financialApproverName] as [string, string]]
                   : []),
                 ...(data.financialApprovedAt
-                  ? [[t('workflow.summary.approval_date'), fmtDateTime(data.financialApprovedAt)] as [string, string]]
+                  ? [[t('workflow.summary.approval_date'), fmtDateTime(data.financialApprovedAt, language)] as [string, string]]
                   : []),
                 [t('workflow.summary.classification_confirmed'), classificationLabel],
               ]}

@@ -147,9 +147,15 @@ export default function Reports() {
               <Badge variant="business" className="mb-4">{t('common.business_plan')}</Badge>
               <h3 className="text-lg font-semibold mb-2">{t('reports.unlock_advanced')}</h3>
               <p className="text-sm text-muted-foreground max-w-md mb-6">{t('reports.unlock_desc')}</p>
-              <Button variant="accent" size="lg" asChild>
-                <Link to="/app/settings/account?tab=billing">{t('integrations.upgrade_business')}</Link>
-              </Button>
+              {/* Wave 5: only admins can act on Billing — sending an editor
+                  there just to be told "admin only" is a two-click dead-end. */}
+              {isAdmin ? (
+                <Button variant="accent" size="lg" asChild>
+                  <Link to="/app/settings/account?tab=billing">{t('integrations.upgrade_business')}</Link>
+                </Button>
+              ) : (
+                <p className="text-sm text-muted-foreground">{t('usage.ask_admin_upgrade')}</p>
+              )}
             </CardContent>
           </Card>
 

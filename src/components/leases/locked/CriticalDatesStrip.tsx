@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
-import { format, differenceInCalendarDays } from 'date-fns';
-import { parseToLocalDate } from '@/lib/dateFormatters';
+import { differenceInCalendarDays } from 'date-fns';
+import { parseToLocalDate, formatLocalizedDate } from '@/lib/dateFormatters';
 import { Calendar, TrendingUp, Bell } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
@@ -103,7 +103,7 @@ const renewalNoticeDeadline = (
 };
 
 export function CriticalDatesStrip({ lease }: Props) {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
 
   const chips: Chip[] = useMemo(() => {
     const today = new Date();
@@ -126,7 +126,7 @@ export function CriticalDatesStrip({ lease }: Props) {
             label: `${t('locked_lease.critical_dates.expires_in')} ${formatDistance(end, t)}`,
             date: end,
             tone: toneFromDays(days),
-            tooltip: `${t('locked_lease.critical_dates.expiration_date')}: ${format(end, 'MMM d, yyyy')}`,
+            tooltip: `${t('locked_lease.critical_dates.expiration_date')}: ${formatLocalizedDate(end, language)}`,
           });
         }
         // Out of window: the full date lives in the General tab (Lease Timing section).
@@ -170,7 +170,7 @@ export function CriticalDatesStrip({ lease }: Props) {
         label: `${t('locked_lease.critical_dates.next_rent_change_in')} ${formatDistance(nextRentChange.date, t)}`,
         date: nextRentChange.date,
         tone: 'neutral',
-        tooltip: nextRentChange.notes ?? `${format(nextRentChange.date, 'MMM d, yyyy')}`,
+        tooltip: nextRentChange.notes ?? `${formatLocalizedDate(nextRentChange.date, language)}`,
       });
     }
 
@@ -179,7 +179,7 @@ export function CriticalDatesStrip({ lease }: Props) {
     // which is anti-signal. Only chips a user can ACT on earn this row.)
 
     return out.sort((a, b) => a.date.getTime() - b.date.getTime());
-  }, [lease, t]);
+  }, [lease, t, language]);
 
   if (chips.length === 0) return null;
 

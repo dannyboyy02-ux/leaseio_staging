@@ -26,6 +26,7 @@ import { Badge } from '@/components/ui/badge';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 
 interface UsageSnapshot {
   id: string;
@@ -87,7 +88,7 @@ function daysUntil(dateStr: string): number {
 }
 
 export default function OperationsPage() {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   // P2-02: explicit ops-admin gate. The previous design relied solely
   // on RLS — non-ops users hit the route and saw an empty dashboard
   // with no signal that they weren't authorized. Now we ask the DB
@@ -247,7 +248,7 @@ export default function OperationsPage() {
                         <Badge variant="outline" className="text-[10px]">{latest.category}</Badge>
                       </div>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(latest.recorded_at).toLocaleString()}
+                        {formatLocalizedDateTime(latest.recorded_at, language)}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
@@ -342,7 +343,7 @@ export default function OperationsPage() {
                       <span className="font-mono text-sm">{a.vendor}</span>
                       <span className="text-muted-foreground">·</span>
                       <span className="font-mono text-sm">{a.metric}</span>
-                      <span className="text-xs text-muted-foreground">{new Date(a.fired_at).toLocaleString()}</span>
+                      <span className="text-xs text-muted-foreground">{formatLocalizedDateTime(a.fired_at, language)}</span>
                     </div>
                     <p className="text-xs text-muted-foreground">
                       {a.current_value} / {a.limit_value ?? t('operations.no_cap')}{a.pct_of_limit !== null ? ` · ${a.pct_of_limit}%` : ''}

@@ -18,11 +18,15 @@ import { cn } from '@/lib/utils';
 
 export type StatTileAccent = 'default' | 'blue' | 'orange' | 'red';
 
+// Dark pairs required (Wave 5): these light-only tints rendered as washed
+// bright patches on the dark theme — on the KPI strip, the alert-accented
+// tiles were the LEAST readable ones. One constant fixes every StatTile
+// surface (Dashboard, Portfolio, FirmDashboard) at once.
 const ACCENT_CLASS: Record<StatTileAccent, string> = {
   default: '',
-  blue: 'border-blue-200 bg-blue-50/50',
-  orange: 'border-orange-200 bg-orange-50/50',
-  red: 'border-red-200 bg-red-50/50',
+  blue: 'border-blue-200 bg-blue-50/50 dark:border-blue-900 dark:bg-blue-950/30',
+  orange: 'border-orange-200 bg-orange-50/50 dark:border-orange-900 dark:bg-orange-950/30',
+  red: 'border-red-200 bg-red-50/50 dark:border-red-900 dark:bg-red-950/30',
 };
 
 export interface StatTileProps {

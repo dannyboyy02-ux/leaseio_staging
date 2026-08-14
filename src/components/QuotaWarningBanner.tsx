@@ -114,21 +114,21 @@ export function QuotaWarningBanner() {
     <div
       className={
         isCritical
-          ? 'border-b border-red-300 bg-red-50 px-4 py-3'
-          : 'border-b border-amber-300 bg-amber-50 px-4 py-3'
+          ? 'border-b border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30 px-4 py-3'
+          : 'border-b border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30 px-4 py-3'
       }
       role="alert"
     >
       <div className="max-w-7xl mx-auto flex items-start gap-3">
-        <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${isCritical ? 'text-red-700' : 'text-amber-700'}`} />
+        <AlertTriangle className={`h-4 w-4 mt-0.5 shrink-0 ${isCritical ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400'}`} />
         <div className="flex-1">
-          <p className={`text-sm font-medium ${isCritical ? 'text-red-900' : 'text-amber-900'}`}>
+          <p className={`text-sm font-medium ${isCritical ? 'text-red-900 dark:text-red-200' : 'text-amber-900 dark:text-amber-200'}`}>
             {t(isCritical ? 'quota_banner.used_pct_critical' : 'quota_banner.used_pct', {
               pct: Math.round(pct),
               noun,
             })}
           </p>
-          <p className={`text-xs ${isCritical ? 'text-red-800' : 'text-amber-800'}`}>
+          <p className={`text-xs ${isCritical ? 'text-red-800 dark:text-red-300' : 'text-amber-800 dark:text-amber-300'}`}>
             {t('quota_banner.detail', {
               current: formatLocalizedNumber(banner.current_value, language),
               limit: banner.limit_value != null ? formatLocalizedNumber(banner.limit_value, language) : '',
@@ -158,7 +158,7 @@ export function QuotaWarningBanner() {
             type="button"
             onClick={handleDismiss}
             aria-label={t('quota_banner.dismiss')}
-            className="p-1 rounded hover:bg-amber-100 text-amber-700"
+            className="p-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-700 dark:text-amber-400"
           >
             <X className="h-4 w-4" />
           </button>

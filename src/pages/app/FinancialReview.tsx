@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { format } from 'date-fns';
 import {
   CheckCircle,
   XCircle,
@@ -42,7 +41,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedCurrency } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate, formatLocalizedDateTime } from '@/lib/dateFormatters';
 import { displayLabel, type LifecycleStatus } from '@/lib/lifecycleStates';
 import { localizedStatusLabel } from '@/lib/lifecycleLabels';
 import { LeaseDiscountRateCard } from '@/components/leases/LeaseDiscountRateCard';
@@ -389,11 +388,11 @@ export default function FinancialReview() {
                   <span className="font-medium">{lease.escalation_rate != null ? t('approvals.financial.pct_per_year', { rate: lease.escalation_rate }) : '—'}</span>
                   <span className="text-muted-foreground">{t('workflow.request.start_date')}</span>
                   <span className="font-medium">
-                    {lease.lease_start ? format(new Date(lease.lease_start), 'MMM d, yyyy') : '—'}
+                    {lease.lease_start ? formatLocalizedDate(lease.lease_start, language) : '—'}
                   </span>
                   <span className="text-muted-foreground">{t('workflow.summary.end_date')}</span>
                   <span className="font-medium">
-                    {lease.lease_end ? format(new Date(lease.lease_end), 'MMM d, yyyy') : '—'}
+                    {lease.lease_end ? formatLocalizedDate(lease.lease_end, language) : '—'}
                   </span>
                 </div>
 
@@ -414,7 +413,7 @@ export default function FinancialReview() {
                   <p className="font-medium">{lease.requestorName || lease.requestorEmail || '—'}</p>
                   <p className="text-xs text-muted-foreground">
                     {lease.uploaded_at
-                      ? format(new Date(lease.uploaded_at), "MMM d, yyyy 'at' h:mm a")
+                      ? formatLocalizedDateTime(lease.uploaded_at, language)
                       : '—'}
                   </p>
                 </div>
@@ -427,7 +426,7 @@ export default function FinancialReview() {
                       <p className="font-medium">{lease.managerName || lease.manager_approved_by}</p>
                       {lease.manager_approved_at && (
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(lease.manager_approved_at), "MMM d, yyyy 'at' h:mm a")}
+                          {formatLocalizedDateTime(lease.manager_approved_at, language)}
                         </p>
                       )}
                     </div>

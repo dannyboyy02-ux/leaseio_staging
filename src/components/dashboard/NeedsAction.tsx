@@ -78,7 +78,7 @@ export function NeedsAction() {
                     onClick={() => navigate(`/app/leases/${item.id}`)}
                     className={`flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm transition-colors ${
                       item.daysWaiting > 7
-                        ? 'bg-orange-50 hover:bg-orange-100'
+                        ? 'bg-orange-50 hover:bg-orange-100 dark:bg-orange-950/30 dark:hover:bg-orange-950/50'
                         : 'bg-muted/40 hover:bg-muted/70'
                     }`}
                   >
@@ -118,7 +118,7 @@ export function NeedsAction() {
                   <div
                     key={item.leaseId}
                     onClick={() => navigate(`/app/leases/${item.leaseId}`)}
-                    className="flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm bg-amber-50 hover:bg-amber-100 transition-colors"
+                    className="flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-950/50 transition-colors"
                   >
                     <RotateCcw className="h-4 w-4 shrink-0 text-amber-600" />
                     <div className="min-w-0 flex-1">
@@ -150,7 +150,7 @@ export function NeedsAction() {
                   <div
                     key={item.leaseId}
                     onClick={() => navigate(`/app/leases/${item.leaseId}`)}
-                    className="flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 transition-colors"
+                    className="flex items-center gap-2 cursor-pointer rounded-md px-3 py-2 text-sm bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/30 dark:hover:bg-blue-950/50 transition-colors"
                   >
                     <Unlock className="h-4 w-4 shrink-0 text-blue-500" />
                     <div className="min-w-0 flex-1">

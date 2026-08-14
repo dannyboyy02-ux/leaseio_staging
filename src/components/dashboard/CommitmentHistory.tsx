@@ -7,7 +7,7 @@ import { TrendingUp, Loader2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedDate } from '@/lib/dateFormatters';
+import { formatLocalizedCurrency, formatLocalizedDate } from '@/lib/dateFormatters';
 
 interface MonthPoint {
   month: string;
@@ -102,7 +102,7 @@ export function CommitmentHistory() {
               />
               <Tooltip
                 formatter={(val: number) => [
-                  `$${val.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+                  formatLocalizedCurrency(val, language),
                   t('dashboard.commitment'),
                 ]}
                 contentStyle={{

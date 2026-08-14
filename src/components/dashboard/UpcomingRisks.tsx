@@ -102,7 +102,7 @@ export function UpcomingRisks() {
             riskType: 'auto_renewal',
             label: 'dashboard.risk_optout',
             badgeVariant: 'default',
-            badgeClass: 'bg-indigo-100 text-indigo-700',
+            badgeClass: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300',
             daysRemaining: daysToExpiry,
             annualRent,
           });
@@ -121,7 +121,7 @@ export function UpcomingRisks() {
             riskType: 'expiring',
             label: 'dashboard.risk_expiring',
             badgeVariant: 'destructive',
-            badgeClass: 'bg-red-100 text-red-700',
+            badgeClass: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
             daysRemaining: daysToExpiry,
             annualRent,
           });
@@ -137,7 +137,7 @@ export function UpcomingRisks() {
             riskType: 'cpi_escalation',
             label: 'dashboard.risk_cpi',
             badgeVariant: 'secondary',
-            badgeClass: 'bg-amber-100 text-amber-700',
+            badgeClass: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
             daysRemaining: null,
             annualRent,
           });
@@ -174,7 +174,7 @@ export function UpcomingRisks() {
       icon={AlertTriangle}
       iconClassName="text-amber-500"
       title={t('dashboard.upcoming_risks')}
-      className="border-amber-200"
+      className="border-amber-200 dark:border-amber-900"
     >
         {loading ? (
           <div className="space-y-3">

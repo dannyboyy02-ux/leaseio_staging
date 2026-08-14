@@ -9,7 +9,7 @@
 // declare-out-of-office. Revoke calls revoke-out-of-office.
 
 import { useEffect, useMemo, useState } from 'react';
-import { format } from 'date-fns';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 import { CalendarOff, Loader2, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,7 +47,7 @@ interface MemberOption {
 
 export function OutOfOfficeSettings() {
   const { user, workspace } = useApp();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const [members, setMembers] = useState<MemberOption[]>([]);
   const [oooRecords, setOooRecords] = useState<OOORow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -214,7 +214,7 @@ export function OutOfOfficeSettings() {
             <div className="space-y-1 flex-1">
               <p className="font-semibold text-sm">
                 {t('workflow.ooo.active_until', {
-                  date: format(new Date(activeOOO.ends_at), 'MMM d, yyyy h:mm a'),
+                  date: formatLocalizedDateTime(activeOOO.ends_at, language),
                 })}
               </p>
               <p className="text-xs text-muted-foreground">
@@ -325,8 +325,8 @@ export function OutOfOfficeSettings() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap text-sm">
                         <span>
-                          {format(new Date(r.starts_at), 'MMM d, yyyy h:mm a')}{' '}
-                          → {format(new Date(r.ends_at), 'MMM d, yyyy h:mm a')}
+                          {formatLocalizedDateTime(r.starts_at, language)}{' '}
+                          → {formatLocalizedDateTime(r.ends_at, language)}
                         </span>
                         {isActive && (
                           <Badge variant="default" className="text-[10px]">

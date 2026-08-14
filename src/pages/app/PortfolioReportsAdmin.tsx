@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/select';
 import { useApp } from '@/contexts/AppContext';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import { formatLocalizedDateTime } from '@/lib/dateFormatters';
 import { supabase } from '@/integrations/supabase/client';
 import {
   useGeneratePortfolioReport,
@@ -80,7 +81,7 @@ function iso(d: Date): string {
 }
 
 export default function PortfolioReportsAdmin() {
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const { workspace } = useApp();
   const workspaceId = workspace?.id;
 
@@ -272,7 +273,7 @@ export default function PortfolioReportsAdmin() {
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(r.generated_at).toLocaleString()} ·{' '}
+                      {formatLocalizedDateTime(r.generated_at, language)} ·{' '}
                       {t('reports.included_count', { count: r.lease_count })} ·{' '}
                       {t('reports.excluded_count', { count: r.excluded_lease_count })}
                     </p>

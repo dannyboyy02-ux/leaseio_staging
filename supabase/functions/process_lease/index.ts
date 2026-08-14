@@ -12,6 +12,11 @@ import {
   NO_SUBSCRIPTION_ERROR,
   NO_SUBSCRIPTION_REASON,
 } from "../_shared/monetization.ts";
+import {
+  callerCanProcessLeases,
+  READ_ONLY_ROLE_ERROR,
+  READ_ONLY_ROLE_REASON,
+} from "../_shared/role_gate.ts";
 
 // Anthropic (intelligence layer)
 const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
@@ -996,10 +1001,32 @@ function quotaBlockResponse(
 async function checkProcessingQuota(
   supabaseAdmin: ReturnType<typeof createClient>,
   workspaceId: string | null,
+  userId: string,
   corsHeaders: Record<string, string>,
   opts: { isNewLease: boolean },
 ): Promise<QuotaDecision> {
   if (!workspaceId) return { kind: 'ok' };
+
+  // Wave 5 viewer gate: a view-only member must not create or process leases
+  // (every caller of this function burns paid Opus). Enforced here so ALL
+  // paid-AI paths — new lease, executed re-abstraction, finalize — gate
+  // identically; paired with the leases INSERT policy
+  // (leases_insert_own_editor_plus) and _shared/role_gate.ts. Fail closed.
+  if (!(await callerCanProcessLeases(supabaseAdmin, workspaceId, userId))) {
+    return {
+      kind: 'block',
+      response: new Response(
+        JSON.stringify({
+          ok: false,
+          error: READ_ONLY_ROLE_ERROR,
+          reason: READ_ONLY_ROLE_REASON,
+        }),
+        // 200 + ok:false — same contract as the no_subscription block below,
+        // so the upload modal surfaces the actionable message.
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      ),
+    };
+  }
 
   const { data: ws } = await supabaseAdmin
     .from('workspaces')
@@ -1441,7 +1468,7 @@ serve(async (req) => {
       }
       // Monthly-cap quota (the lease already exists; no credit consumed — a
       // re-extraction over the cap just blocks, same as executed mode).
-      const finQuota = await checkProcessingQuota(supabaseAdmin, finLease.workspace_id, corsHeaders, { isNewLease: false });
+      const finQuota = await checkProcessingQuota(supabaseAdmin, finLease.workspace_id, user.id, corsHeaders, { isNewLease: false });
       if (finQuota.kind === 'block') return finQuota.response;
 
       const finBytes = await finFileData.arrayBuffer();
@@ -1671,6 +1698,7 @@ serve(async (req) => {
       const execQuota = await checkProcessingQuota(
         supabaseAdmin,
         existingLease.workspace_id,
+        user.id,
         corsHeaders,
         { isNewLease: false },
       );
@@ -2066,6 +2094,7 @@ serve(async (req) => {
     const quotaDecision = await checkProcessingQuota(
       supabaseAdmin,
       resolvedWorkspaceId,
+      user.id,
       corsHeaders,
       { isNewLease: true },
     );
