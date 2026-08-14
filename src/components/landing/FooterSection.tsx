@@ -29,22 +29,22 @@ export function FooterSection() {
             <h4 className="font-semibold text-foreground mb-4">{t('landing.footer.product')}</h4>
             <ul className="space-y-2">
               <li>
-                <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <a href="/#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   {t('landing.footer.features')}
                 </a>
               </li>
               <li>
-                <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <a href="/#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   {t('landing.footer.pricing')}
                 </a>
               </li>
               <li>
-                <a href="#security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <a href="/#security" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   {t('landing.footer.security')}
                 </a>
               </li>
               <li>
-                <a href="#faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+                <a href="/#faq" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   {t('landing.nav.faq')}
                 </a>
               </li>

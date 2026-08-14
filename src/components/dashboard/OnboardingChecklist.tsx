@@ -50,7 +50,14 @@ const stepDefinitions: OnboardingStep[] = [
   },
 ];
 
-export function OnboardingChecklist() {
+interface OnboardingChecklistProps {
+  /** When provided, the "upload your first lease" step opens the same
+   *  Add-Lease chooser as the Dashboard hero/header instead of navigating to
+   *  /app/imports — so the first-run screen prescribes ONE gesture, not two. */
+  onAddLease?: () => void;
+}
+
+export function OnboardingChecklist({ onAddLease }: OnboardingChecklistProps = {}) {
   const [dismissed, setDismissed] = useState(false);
   const [loadingPrefs, setLoadingPrefs] = useState(true);
   const [completedSteps, setCompletedSteps] = useState<string[]>([]);
@@ -261,6 +268,16 @@ export function OnboardingChecklist() {
                 key={step.id}
                 type="button"
                 onClick={() => setInviteDialogOpen(true)}
+                className={sharedClassName}
+                style={{ animationDelay: `${index * 50}ms` }}
+              >
+                {content}
+              </button>
+            ) : step.id === 'upload' && onAddLease ? (
+              <button
+                key={step.id}
+                type="button"
+                onClick={onAddLease}
                 className={sharedClassName}
                 style={{ animationDelay: `${index * 50}ms` }}
               >

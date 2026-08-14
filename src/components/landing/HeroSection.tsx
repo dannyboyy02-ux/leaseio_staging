@@ -36,11 +36,12 @@ export function HeroSection() {
 
           {/* CTAs — ONE primary (FS-10): the trial is THE next step; the free
               audit is the demoted secondary so a first-timer isn't choosing
-              between two equal-weight buttons. */}
+              between two equal-weight buttons. A signed-in visitor gets their
+              dashboard instead of a signup they can't use. */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <Button size="lg" asChild className="w-full sm:w-auto">
-              <Link to="/signup">
-                {t('landing.hero.cta_trial')}
+              <Link to={user ? '/app/dashboard' : '/signup'}>
+                {t(user ? 'landing.hero.cta_dashboard' : 'landing.hero.cta_trial')}
                 <ArrowRight className="ml-2 h-4 w-4" />
               </Link>
             </Button>

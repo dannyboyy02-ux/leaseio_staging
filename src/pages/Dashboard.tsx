@@ -55,14 +55,20 @@ export default function Dashboard() {
 
   // FS-9: a brand-new workspace used to render the checklist PLUS ~7 empty
   // analytics widgets — a wall that diluted the one gesture that matters
-  // (add the first lease). One cheap head-count picks the layout. Archived
-  // leases still count (that's not a first run); soft-deleted rows are
-  // already hidden from authenticated reads by RLS. While the count loads
-  // (undefined) we render the full grid — the common, has-data case — so
-  // existing workspaces never flash the first-run hero.
+  // (add the first lease). Layout resolution, tuned so NEITHER cohort gets a
+  // wrong-layout flash (layout review):
+  //   1. activeLeasesUsed > 0 (already on the workspace object, synchronous)
+  //      → definitely not a first run → full grid immediately, no query.
+  //   2. Otherwise (0 active — could still have drafts/archived) a cheap
+  //      head-count decides; while it loads we render the checklist alone (a
+  //      calm frame that's plausible for both outcomes) instead of the
+  //      7-widget skeleton wall morphing into the hero.
+  // Archived/draft leases count as "not a first run"; soft-deleted rows are
+  // already hidden from authenticated reads by RLS.
+  const definitelyHasLeases = (workspace?.activeLeasesUsed ?? 0) > 0;
   const { data: leaseCount } = useQuery({
     queryKey: ['dashboard-any-lease', workspace?.id],
-    enabled: !!workspace?.id,
+    enabled: !!workspace?.id && !definitelyHasLeases,
     queryFn: async () => {
       const { count, error } = await supabase
         .from('leases')
@@ -72,7 +78,8 @@ export default function Dashboard() {
       return count ?? 0;
     },
   });
-  const firstRun = leaseCount === 0;
+  const firstRun = !definitelyHasLeases && leaseCount === 0;
+  const firstRunUndetermined = !definitelyHasLeases && leaseCount === undefined;
 
   // FS-2: the Dashboard's primary CTA now opens the SAME two-path chooser as
   // the Leases page (Request approval / Upload document) instead of jumping
@@ -114,16 +121,29 @@ export default function Dashboard() {
       />
 
       <PageLayout width="wide">
-        {/* Onboarding — auto-hides when all steps complete or dismissed */}
-        <OnboardingChecklist />
-
         {firstRun ? (
-          // First run (0 leases): the checklist + one hero with the Add-Lease
-          // chooser. The analytics widgets stay hidden until there's a lease
-          // for them to describe (FS-9).
-          <EmptyLeaseState onAddLease={handleAddLease} readOnly={isReadOnly} />
+          // First run (0 leases): ONE hero with the Add-Lease chooser, FIRST —
+          // the screen's primary gesture renders above the fold; the checklist
+          // (which auto-hides when complete/dismissed) follows. The analytics
+          // widgets stay hidden until there's a lease to describe (FS-9).
+          <>
+            <EmptyLeaseState
+              onAddLease={handleAddLease}
+              readOnly={isReadOnly}
+              title={t('dashboard.first_run_title')}
+              description={t('dashboard.first_run_desc')}
+            />
+            <OnboardingChecklist onAddLease={handleAddLease} />
+          </>
+        ) : firstRunUndetermined ? (
+          // 0 active leases and the head-count hasn't settled: hold a calm
+          // checklist-only frame instead of flashing the wrong layout.
+          <OnboardingChecklist onAddLease={handleAddLease} />
         ) : (
           <>
+        {/* Onboarding — auto-hides when all steps complete or dismissed */}
+        <OnboardingChecklist onAddLease={handleAddLease} />
+
         {/* KPI strip — monthly rent, pipeline value, awaiting approval, expiring */}
         <SummaryStrip />
 
