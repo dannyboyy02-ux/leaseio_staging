@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import { ArrowUpRight, Check } from 'lucide-react';
+import { Check } from 'lucide-react';
+import { StatTile } from '@/components/ui/stat-tile';
 import { useApp } from '@/contexts/AppContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { supabase } from '@/integrations/supabase/client';
@@ -236,12 +237,6 @@ export function SummaryStrip() {
     );
   }
 
-  const accentClasses: Record<string, string> = {
-    blue: 'border-blue-200 bg-blue-50/50',
-    orange: 'border-orange-200 bg-orange-50/50',
-    red: 'border-red-200 bg-red-50/50',
-    default: '',
-  };
 
   // Compose the three tiles at render so the Needs Action tile reflects the
   // live useNeedsAction count (stats[0]=monthly, stats[1]=expiring from the
@@ -267,32 +262,26 @@ export function SummaryStrip() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
       {displayStats.map((box) => (
-        <div
+        <StatTile
           key={box.label}
+          label={box.label}
+          value={box.primary}
+          sub={box.sub}
+          accent={box.accent}
           onClick={box.disabled ? undefined : () => navigate(box.href)}
-          className={`group rounded-lg border bg-card p-4 transition-shadow ${accentClasses[box.accent ?? 'default']} ${box.disabled ? 'cursor-default' : 'cursor-pointer hover:shadow-md'}`}
-        >
-          <div className="flex items-start justify-between">
-            <p className="text-xs text-muted-foreground">{box.label}</p>
-            <div className="flex items-center gap-1">
-              {box.onDismiss && (
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); box.onDismiss!(); }}
-                  className="text-muted-foreground/40 hover:text-green-500 transition-colors"
-                  title={t('dashboard.mark_as_seen')}
-                >
-                  <Check className="h-3 w-3" />
-                </button>
-              )}
-              {!box.disabled && (
-                <ArrowUpRight className="h-3 w-3 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors shrink-0" />
-              )}
-            </div>
-          </div>
-          <p className="mt-1 text-xl lg:text-2xl font-semibold tracking-tight truncate tabular-nums">{box.primary}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">{box.sub}</p>
-        </div>
+          trailing={
+            box.onDismiss ? (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); box.onDismiss!(); }}
+                className="text-muted-foreground/40 transition-colors hover:text-green-500"
+                title={t('dashboard.mark_as_seen')}
+              >
+                <Check className="h-3 w-3" />
+              </button>
+            ) : undefined
+          }
+        />
       ))}
     </div>
   );

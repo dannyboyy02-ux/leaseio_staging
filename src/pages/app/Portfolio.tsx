@@ -22,6 +22,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { StatTile } from '@/components/ui/stat-tile';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApp } from '@/contexts/AppContext';
@@ -62,18 +63,11 @@ const deptColor = (dept: string, i: number) =>
 // Small presentational helpers
 // ---------------------------------------------------------------------------
 
+// Thin adapter over the shared <StatTile> (FS-8): Portfolio's tiles are static
+// (no accent/click), and `title` maps to StatTile's `valueTitle` — the full
+// figure on hover when the compact value truncates in the narrow tile.
 function KpiTile({ label, value, sub, title }: { label: string; value: string; sub: string; title?: string }) {
-  return (
-    <Card>
-      <CardContent className="p-4">
-        <p className="text-xs leading-tight text-muted-foreground">{label}</p>
-        {/* truncate + title: compact values fit the narrow tile; the full
-            figure is available on hover for anyone who needs the exact number. */}
-        <p className="mt-1.5 truncate font-display text-2xl font-bold tracking-tight" title={title}>{value}</p>
-        <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>
-      </CardContent>
-    </Card>
-  );
+  return <StatTile label={label} value={value} sub={sub} valueTitle={title} />;
 }
 
 function SectionCard({

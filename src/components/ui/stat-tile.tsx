@@ -1,0 +1,85 @@
+import { type ReactNode } from 'react';
+import { ArrowUpRight } from 'lucide-react';
+import { Card } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
+
+// StatTile — the one labeled-stat-value tile (FS-8).
+//
+// Consolidates the three hand-rolled KPI tiles that made the dashboards feel
+// authored by three people: SummaryStrip's interactive StatBox (Dashboard),
+// Portfolio's KpiTile, and FirmDashboard's stat() helper. Each had a different
+// value font/weight and container. This is the single treatment:
+// font-display / text-2xl / bold / tabular-nums, in a shadcn Card.
+//
+// Static use is trivial — <StatTile label value sub />. The interactive Dashboard
+// tiles opt into the rest: `accent` tints the card, `onClick` makes the whole
+// card a clickable target with a hover affordance, and `trailing` is a top-right
+// slot (SummaryStrip's dismiss button).
+
+export type StatTileAccent = 'default' | 'blue' | 'orange' | 'red';
+
+const ACCENT_CLASS: Record<StatTileAccent, string> = {
+  default: '',
+  blue: 'border-blue-200 bg-blue-50/50',
+  orange: 'border-orange-200 bg-orange-50/50',
+  red: 'border-red-200 bg-red-50/50',
+};
+
+export interface StatTileProps {
+  label: ReactNode;
+  value: ReactNode;
+  sub?: ReactNode;
+  /** Leading icon before the label (FirmDashboard style). */
+  icon?: ReactNode;
+  /** Native title on the value — reveals the full figure on hover when it truncates. */
+  valueTitle?: string;
+  accent?: StatTileAccent;
+  /** When set, the whole tile becomes a clickable card with a hover affordance. */
+  onClick?: () => void;
+  /** Extra top-right slot (e.g. a dismiss button), rendered before the affordance. */
+  trailing?: ReactNode;
+  className?: string;
+}
+
+export function StatTile({
+  label,
+  value,
+  sub,
+  icon,
+  valueTitle,
+  accent = 'default',
+  onClick,
+  trailing,
+  className,
+}: StatTileProps) {
+  const interactive = onClick != null;
+  return (
+    <Card
+      variant={interactive ? 'interactive' : 'default'}
+      onClick={onClick}
+      className={cn('group p-4', ACCENT_CLASS[accent], className)}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
+          {icon}
+          <span className="truncate text-xs">{label}</span>
+        </div>
+        {(trailing || interactive) && (
+          <div className="flex shrink-0 items-center gap-1">
+            {trailing}
+            {interactive && (
+              <ArrowUpRight className="h-3 w-3 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
+            )}
+          </div>
+        )}
+      </div>
+      <p
+        className="mt-1.5 truncate font-display text-2xl font-bold tracking-tight tabular-nums"
+        title={valueTitle}
+      >
+        {value}
+      </p>
+      {sub != null && <p className="mt-0.5 text-xs text-muted-foreground">{sub}</p>}
+    </Card>
+  );
+}
