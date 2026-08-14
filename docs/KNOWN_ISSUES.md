@@ -125,6 +125,11 @@ security migration re-creating the profiles SELECT policy with a firm-coworker a
 owner is firm staff of a non-restricted firm-bound workspace the caller can access), scoped so
 a DIFFERENT firm's staff never become visible; route through pre-apply security review.
 Pre-existing shape, newly reachable via #197. Surfaced by the #197 integrity review.
+**NOT closed by the #206 profile-name-sync fix (2026-08-14):** that fix is a DATA population
+gap (names weren't written to `profiles` at all) — orthogonal to this RLS VISIBILITY gap. Even
+with names now populated, a pure firm staffer's profile row stays invisible to other users
+until this firm-coworker SELECT arm lands. #206 fixes the common single-workspace case (own row
++ direct coworkers); #202 is still needed for the pure-firm-staff case.
 
 ### #203 (MEDIUM, firm UX degradation) Direct-membership-shaped SELECT policies silently degrade the firm-staff request flow (notifications, banner truth, chain visibility, doc attachment)
 Four related non-firm-aware gates, all fail-closed but felt: (a) `workspace_roles` SELECT —
@@ -154,6 +159,28 @@ addendum (2026-08-14):* third member of the cluster — `AccountSettings.tsx:~12
 class (firm-bound never-subscribed child) is still sold a trial in the Billing tab directly
 under the "managed by your firm" banner (its `proceedWithCheckout` 403s `firm_managed`). Fix
 alongside: `!firmBound &&` on the callout, matching the surrounding banners.
+
+### #206 (MEDIUM, faithful-storage) Signup name/timezone dropped from profiles — RESOLVED 2026-08-14
+`Signup.tsx` writes `{ first_name, last_name, company_name, timezone }` into `supabase.auth.signUp`
+options.data (→ `auth.users.raw_user_meta_data`), but the `handle_new_user` trigger inserted only
+`(id, email)` into `public.profiles`, dropping the rest. Every named signup had its name in auth
+metadata yet NULL in profiles (3 of 5 live profiles), and the chosen timezone stayed at the
+`America/New_York` column default. `AppSidebar` reads the current user's name from
+`authUser.user_metadata` directly (so a user saw their OWN name), but every surface listing OTHER
+users can only read `profiles` (a client can't read another user's auth metadata) — FirmMembers,
+workspace member lists, audit actor names — so those fell back to the raw email; and AppContext
+renders dates from the stale profiles timezone. **Fix (migration `20260814230000`, applied to
+staging):** `handle_new_user` now copies name/company/timezone from metadata (ON CONFLICT
+fill-only via COALESCE; timezone fills only the bare default), plus a two-part backfill — names
+fill-only-on-NULL, and timezone under a PROVABLY-SAFE guard (both names NULL proves the row was
+never edited via Settings, since Signup requires names and Settings writes profiles-only, so its
+timezone is definitionally the untouched default — no deliberate choice can be reverted; the
+timezone UPDATE runs BEFORE the name UPDATE so that proxy survives). Fixed at the data layer so
+every profiles-reader benefits; no component change (the render already prefers name over email).
+Backfill verified live: 3 null-name rows populated, 2 set rows byte-identical, 0 timezone changes.
+Security + integrity reviewed CLEAN pre-apply. Pinned by `profileNameSync.test.ts`. Does NOT close
+#202 (that's an RLS visibility gap for pure firm staff — orthogonal). Surfaced by the #201 firm
+walkthrough.
 
 ### #205 (MEDIUM, monetization, pre-existing) Workspace-less "personal" leases bypass the P0-h gate entirely — no subscription check, no quota, no cap
 `checkProcessingQuota` returns `{ kind: 'ok' }` when the workspace id resolves null
