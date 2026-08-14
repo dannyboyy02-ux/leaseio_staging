@@ -55,18 +55,27 @@ describe('P0-h — shared monetization gate', () => {
 });
 
 describe('P0-h — both paid-AI entry points call the shared gate', () => {
+  // #201 (owner decision 2026-08-14): the entry points now route through the
+  // firm-aware async wrapper resolveProcessingSubscriptionGate, which runs
+  // requiresSubscriptionToProcess FIRST (that ordering is behaviorally pinned
+  // in firmMonetization201.test.ts) and adds the firm-inheritance arm. The
+  // pins here hold the wiring: shared helper imported, gate awaited, its
+  // reason forwarded (no hardcoded trial copy), and the select loads every
+  // column the gate reads — including firm_id.
   it('process_lease (first pass) gates never-subscribed workspaces', () => {
     const pl = read('supabase/functions/process_lease/index.ts');
     expect(pl).toContain('from "../_shared/monetization.ts"');
-    expect(pl).toContain('requiresSubscriptionToProcess(wsRow)');
-    expect(pl).toContain('reason: NO_SUBSCRIPTION_REASON');
+    expect(pl).toContain('await resolveProcessingSubscriptionGate(supabaseAdmin, wsRow)');
+    expect(pl).toContain('reason: subGate.reason');
+    expect(pl).toMatch(/subscription_status, stripe_subscription_id, created_at, firm_id/);
   });
   it('retry_lease (retry) gates never-subscribed workspaces (HIGH-2 fix)', () => {
     const rl = read('supabase/functions/retry_lease/index.ts');
     expect(rl).toContain('from "../_shared/monetization.ts"');
-    expect(rl).toContain('requiresSubscriptionToProcess(wsLiveRow)');
+    expect(rl).toContain('await resolveProcessingSubscriptionGate(supabaseAdmin, wsLiveRow)');
+    expect(rl).toContain('reason: subGate.reason');
     // The liveness SELECT must actually load the columns the gate reads.
-    expect(rl).toMatch(/subscription_status, stripe_subscription_id, created_at/);
+    expect(rl).toMatch(/subscription_status, stripe_subscription_id, created_at, firm_id/);
   });
 });
 

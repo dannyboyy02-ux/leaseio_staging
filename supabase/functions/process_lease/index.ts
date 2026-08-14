@@ -7,11 +7,7 @@ import {
 } from "../_shared/audit.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { checkWorkspaceLive } from "../_shared/workspace_live.ts";
-import {
-  requiresSubscriptionToProcess,
-  NO_SUBSCRIPTION_ERROR,
-  NO_SUBSCRIPTION_REASON,
-} from "../_shared/monetization.ts";
+import { resolveProcessingSubscriptionGate } from "../_shared/monetization.ts";
 import {
   callerCanProcessLeases,
   isFirmStaffOfWorkspace,
@@ -1038,7 +1034,7 @@ async function checkProcessingQuota(
 
   const { data: ws } = await supabaseAdmin
     .from('workspaces')
-    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at, subscription_status, stripe_subscription_id, created_at')
+    .select('plan, document_limit, addon_document_capacity, purchased_lease_credits, canceled_at, soft_deleted_at, subscription_status, stripe_subscription_id, created_at, firm_id')
     .eq('id', workspaceId)
     .maybeSingle();
   const wsRow = ws as {
@@ -1051,6 +1047,7 @@ async function checkProcessingQuota(
     subscription_status?: string | null;
     stripe_subscription_id?: string | null;
     created_at?: string | null;
+    firm_id?: string | null;
   } | null;
   const plan = (wsRow?.plan === 'business') ? 'business' : 'starter';
 
@@ -1094,16 +1091,20 @@ async function checkProcessingQuota(
   // subscription (no trial, no pay — checkout abandoned) is not entitled to
   // process documents; without this it got the product free forever. Exemptions:
   // 'audit' (free lead-magnet, capped by its own document_limit) and 'vault'
-  // (handled above). Shared with retry_lease so both paid-AI entry points gate
-  // identically — see _shared/monetization.ts for the grandfather rationale.
-  if (requiresSubscriptionToProcess(wsRow)) {
+  // (handled above). #201 (owner decision 2026-08-14): firm-bound children
+  // INHERIT entitlement from the firm's live subscription; an un-entitled firm
+  // child gets `firm_subscription_required` (never the workspace trial CTA —
+  // its own checkout 403s firm_managed). Shared with retry_lease so both
+  // paid-AI entry points gate identically — see _shared/monetization.ts.
+  const subGate = await resolveProcessingSubscriptionGate(supabaseAdmin, wsRow);
+  if (subGate.blocked) {
     return {
       kind: 'block',
       response: new Response(
         JSON.stringify({
           ok: false,
-          error: NO_SUBSCRIPTION_ERROR,
-          reason: NO_SUBSCRIPTION_REASON,
+          error: subGate.error,
+          reason: subGate.reason,
         }),
         // 200 + ok:false so the client surfaces the actionable message (the
         // upload modal reads result.error on 200; a 4xx would show a generic

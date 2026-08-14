@@ -1476,7 +1476,12 @@
       "no_subscription_desc": "Comience su plan para procesar documentos.",
       "no_subscription_heading": "Su prueba gratuita de 7 días comienza al finalizar la compra",
       "no_subscription_body": "Inicie su suscripción para comenzar a abstraer arrendamientos con IA. No se le cobrará hasta que finalice la prueba y puede cancelar en cualquier momento.",
-      "no_subscription_cta": "Iniciar prueba gratuita"
+      "no_subscription_cta": "Iniciar prueba gratuita",
+      "firm_subscription_title": "La facturación la administra su firma",
+      "firm_subscription_desc": "Este espacio de trabajo procesa documentos con la suscripción de su firma.",
+      "firm_subscription_heading": "La suscripción de su firma aún no está activa",
+      "firm_subscription_body": "La facturación de este espacio de trabajo se gestiona a nivel de firma. Pida a su administrador de firma que active la suscripción para comenzar a procesar documentos.",
+      "firm_subscription_cta": "Ir a la facturación de la firma"
     },
     "tier2": {
       "type_asset_label": "Tipo de activo incorrecto",

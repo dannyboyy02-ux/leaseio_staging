@@ -1476,7 +1476,12 @@
       "no_subscription_desc": "Begin your plan to process documents.",
       "no_subscription_heading": "Your 7-day free trial starts at checkout",
       "no_subscription_body": "Start your subscription to begin abstracting leases with AI. You won't be charged until the trial ends, and you can cancel anytime.",
-      "no_subscription_cta": "Start free trial"
+      "no_subscription_cta": "Start free trial",
+      "firm_subscription_title": "Billing is managed by your firm",
+      "firm_subscription_desc": "This workspace processes documents under your firm's subscription.",
+      "firm_subscription_heading": "Your firm's subscription isn't active yet",
+      "firm_subscription_body": "This workspace's billing is handled at the firm level. Ask your firm admin to activate the firm's subscription to begin processing documents.",
+      "firm_subscription_cta": "Go to firm billing"
     },
     "tier2": {
       "type_asset_label": "Wrong asset type",

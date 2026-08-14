@@ -95,18 +95,25 @@ membership). All gates pinned by `firmStaffIntake197.test.ts`. Follow-ons filed:
 child monetization gate — decision), #202 (audit display names), #203 (firm-blind SELECT
 policies cluster), #204 (quota banner/limit-wall firm doors).
 
-### #201 (HIGH, product decision + honesty) A never-subscribed firm-bound child is blocked from processing and sold a 7-day trial it structurally cannot start
-`applyFirmSubscription` (stripe-webhook) propagates `plan='business'` to children but never
-stamps `subscription_status`/`stripe_subscription_id`, and `_shared/monetization.ts`
-`requiresSubscriptionToProcess` has no firm awareness — so any post-2026-07-16 child bound
-without its own past subscription hits `no_subscription` on every upload. The LeaseUploadModal
-panel then sells "your 7-day free trial starts at checkout", but the billing tab is locked
-("Managed by your firm") and autoCheckout 403s `firm_managed`: a promise the workspace cannot
-keep, permanently. Newly-intake-capable firm staff (#197) are the users who will hit it.
-**Decision needed (owner):** exempt firm-bound children whose FIRM has a live subscription in
-`requiresSubscriptionToProcess` (server half); then swap the modal's trial CTA for a
-firm-managed panel (reuse `limit_wall.firm_managed_*` copy) when `workspace.firmId` is set (UI
-half). Zero current impact (no firms in prod). Surfaced by the #197 polish review.
+### #201 (HIGH, product decision + honesty) A never-subscribed firm-bound child was blocked from processing and sold a trial it couldn't start — RESOLVED 2026-08-14 (owner decision: firm children INHERIT from the firm subscription)
+`applyFirmSubscription` propagates `plan='business'` to children but never stamps their own
+subscription columns, and the monetization gate had no firm awareness — so any post-2026-07-16
+child bound without its own past subscription hit `no_subscription` on every upload, and the
+modal sold a trial whose checkout 403s `firm_managed`. **Owner decision 2026-08-14: firm-bound
+children inherit processing entitlement from the firm's subscription.** As built (branch
+`firm-staff-intake-197`, with #197): `_shared/monetization.ts` gains the async
+`resolveProcessingSubscriptionGate(admin, ws)` — the workspace-local pure gate (grandfather,
+plan exemptions, own past sub) runs first; only when it would block AND the workspace is
+firm-bound is `firms.stripe_subscription_id` consulted (the webhook's entitlement pointer:
+written only for active/trialing, kept through dunning, cleared on deletion). Live firm sub →
+unblocked; no firm sub (or lookup error — fail closed) → blocked with the NEW
+`firm_subscription_required` reason so the client never shows the trial CTA. Both paid-AI
+entry points route through it (`process_lease` 200+ok:false contract, `retry_lease` 403;
+selects gained `firm_id`). LeaseUploadModal renders a firm panel for the new reason
+(`leases.upload.firm_subscription_*` en+es): honest "billing is handled at the firm level"
+copy, Close, and a "Go to firm billing" door for firm users only. Pinned by
+`firmMonetization201.test.ts` (behavioral gate tests — monetization.ts is dependency-free, so
+the Deno-shared file is unit-tested directly — plus entry-point wiring pins).
 
 ### #202 (MEDIUM, audit display) Pure firm staff render as '—' in every audit surface — the profiles SELECT coworker arm requires a workspace_members row
 Attribution STORAGE is intact (`user_id` UUIDs on created/status_change/document rows), but
