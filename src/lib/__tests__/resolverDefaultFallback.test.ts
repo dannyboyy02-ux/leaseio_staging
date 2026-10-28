@@ -62,8 +62,10 @@ describe('#move1 — resolve-approval-chain default-approver fallback + determin
     const guard = code.indexOf('isFallbackFromNoMatch && legacyStatus === "approved"');
     expect(compute).toBeGreaterThanOrEqual(0);
     expect(guard).toBeGreaterThanOrEqual(0);
-    // If someone moves the computation back below the guard, legacyStatus is
-    // undefined at the check and the bypass silently returns.
+    // Moving the computation back below the guard would be a TS compile error
+    // plus a runtime TDZ ReferenceError — fail-LOUD, not silent. This pin is
+    // kept because it protects the INTENT (gate on outcome, not presence)
+    // against a refactor that reorders without reintroducing the TDZ.
     expect(compute).toBeLessThan(guard);
   });
 

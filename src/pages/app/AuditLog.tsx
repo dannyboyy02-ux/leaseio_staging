@@ -118,16 +118,16 @@ const ACTIVITY_LABELS: Record<string, string> = {
   chain_resolution_failed: 'Approval routing failed',
   chain_rerouted: 'Approval route changed',
   chain_routing_rule_changed: 'A different rule now applies',
-  chain_reroute_skipped_no_match: 'Approval route kept — no rule matched',
+  chain_reroute_skipped_no_match: 'Approval route unchanged',
   reroute_audit_run: 'Routing audit run',
   concept_stage_entered: 'Sent for initial approval',
   concept_stage_completed: 'Initial approval completed',
   chain_stage_completed: 'Approval stage completed',
   negotiation_stage_entered: 'Moved to negotiation',
   pending_counter_signature_started: 'Awaiting counter-signature',
-  signator_attestation_recorded: 'Signature recorded',
+  signator_attestation_recorded: 'Intent-to-bind attestation recorded',
   execution_owner_assigned: 'Execution owner assigned',
-  chain_violation_entered: 'Approval conflict detected',
+  chain_violation_entered: 'Approval incomplete (retroactive approval required)',
 };
 
 export default function AuditLog() {

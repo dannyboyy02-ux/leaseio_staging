@@ -3422,16 +3422,16 @@
       "chain_resolution_failed": "Falló el enrutamiento de aprobación",
       "chain_rerouted": "Ruta de aprobación modificada",
       "chain_routing_rule_changed": "Ahora aplica una regla distinta",
-      "chain_reroute_skipped_no_match": "Se mantuvo la ruta: ninguna regla coincidió",
+      "chain_reroute_skipped_no_match": "Ruta de aprobación sin cambios",
       "reroute_audit_run": "Auditoría de enrutamiento ejecutada",
       "concept_stage_entered": "Enviado para aprobación inicial",
       "concept_stage_completed": "Aprobación inicial completada",
       "chain_stage_completed": "Etapa de aprobación completada",
       "negotiation_stage_entered": "Pasó a negociación",
       "pending_counter_signature_started": "Esperando contrafirma",
-      "signator_attestation_recorded": "Firma registrada",
+      "signator_attestation_recorded": "Atestación de intención de obligarse registrada",
       "execution_owner_assigned": "Responsable de ejecución asignado",
-      "chain_violation_entered": "Conflicto de aprobación detectado"
+      "chain_violation_entered": "Aprobación incompleta (se requiere aprobación retroactiva)"
     }
   },
   "new_lease": {

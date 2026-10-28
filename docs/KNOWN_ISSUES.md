@@ -154,6 +154,102 @@ undocumented, so every new surface re-derives it and reviewers flag correct code
 chip-vs-text rule in CLAUDE.md's layout-system section. Pre-existing and app-wide — explicitly NOT
 bundled into the approval redesign.
 
+### #218 (HIGH, PRE-EXISTING, approval bypass — wider than #207 was) Any workspace EDITOR can INSERT a lease that is already `approved`, bypassing the entire approval engine
+**Verified directly 2026-10-27.** The trigger CLAUDE.md treats as the lifecycle-write boundary,
+`prevent_unauthorized_lease_workflow_edits`, is declared `BEFORE **UPDATE** ON public.leases`
+(`20260516120000_baseline_schema.sql:3075`) and its body opens with
+`IF TG_OP <> 'UPDATE' THEN RETURN NEW; END IF;` (`:585-587`) — **INSERT is explicitly exempt.** The
+INSERT policy `leases_insert_own_editor_plus` (`20260814170000:35-39`) constrains only
+`auth.uid() = user_id` and `has_workspace_permission(..., 'editor')`; it says nothing about
+`lifecycle_status`, `manager_approved_by`, `financial_approved_by` or `model_locked`.
+
+**So any workspace editor can `POST /rest/v1/leases` with `lifecycle_status: 'approved'` and the
+approval-attribution columns pre-filled, creating a fully-approved lease that never touched
+`resolve-approval-chain`, the #207 guard, the approval chain, separation of duties, or the
+Lifecycle Transition Convention.** No chain rows, no `status_change` row, no `chain_resolved` row —
+it simply appears approved in the repository, in reports, and in the ASC-842 disclosure pack.
+
+This is STRICTLY WIDER than the #207 bypass this branch just closed: #207 needed a specific
+configuration (financial approver, no manager approver, a threshold, an under-threshold request);
+this needs only the editor role, always. #207 hardened one door; this is a second, wider door on
+the same room. Corroborating dead-code evidence: the retired `useLifecycleWorkflow.createLeaseRequest`
+(`src/hooks/useLifecycleWorkflow.ts:118`) inserts `lifecycle_status: initialStatus` — including
+`'approved'` — straight from the browser; it is orphaned (only reference is the "retired" comment at
+`src/App.tsx:197`), so it is evidence of the hole rather than a live path.
+
+**NOT bundled into the approval branch** — pre-existing and outside its diff, per the
+pre-existing-issues rule. **Fix:** a new migration extending the trigger to INSERT — on an INSERT by
+the `authenticated` role, require `lifecycle_status` to be `'draft'` or NULL and every
+approval-attribution column to be NULL (service_role unaffected, since `process_lease` and the
+resolver legitimately write these). Disjoint-columns pattern. Route through
+lease-security-scanner + lease-repository-integrity-reviewer BEFORE apply, per the
+security-migration rule. **This belongs in the go-to-market conversation: it is an approval-control
+bypass in a product sold on audit defensibility.**
+
+### #219 (HIGH, PRE-EXISTING) Three governance mutations on the Approval Rules page write no audit row at all
+`src/pages/settings/ApprovalPoliciesListPage.tsx` — `setPaused` (direct browser UPDATE of
+`approval_policies.is_active`), `hardDelete` (`.delete()`), and `toggleSodDefault` (direct UPDATE of
+`workspaces.separation_of_duties_default`). None writes a `workspace_activity_log` row. The feature's
+own precedent is explicit: reordering goes through `set_approval_policy_order`, which audits
+`approval_rules_reordered` (`20260719121000:306`). There is no audit trigger on `workspaces` for the
+SoD column either — only the read-only-config guard and `update_updated_at_column`.
+
+**Failure scenario (integrity reviewer's, verified plausible):** an admin flips separation-of-duties
+OFF, submits and self-approves a $400k lease, flips it back ON, and pauses the rule that would have
+forced a second approver. The lease's own log shows a clean chain. **No row anywhere records that
+the control was disabled during that window.** Pausing a rule also changes who approves every future
+matching request — it is the exact column the engine filters on
+(`resolve-approval-chain:373`). **Fix:** route all three through a SECURITY DEFINER RPC or
+service-role function that writes an audit row with from→to and actor, mirroring
+`set_approval_policy_order`; snapshot the rule definition into `details` before a delete.
+
+### #220 (HIGH, PRE-EXISTING) The Audit Log never renders `details`, and its CSV export omits the actor and silently exports only 20 rows
+`src/pages/app/AuditLog.tsx` SELECTs `details` (`:176`) but renders only timestamp, lease, activity
+badge, from→to, and actor — **there is no WHY column**. Every `reason`, every policy id/name, every
+`changed_attributes` diff, the #207 refusal's decision inputs, and `logRoutingRuleChanged`'s
+hand-written plain-English `message` are invisible. Asked "why was this request refused in March?",
+nobody can answer from the product — it takes a service-role SQL query. CLAUDE.md requires each entry
+capture WHO/WHEN/WHAT/**WHY**; WHY is structurally absent. Amplified by #212, which made the label the
+entire visible content of 15 more event types — so a #207 refusal (the product's single strongest
+audit-defence artifact) displays as "Approval routing failed", i.e. as a software defect.
+Separately, `exportToCSV` (`:214-245`) maps only the current page (`PAGE_SIZE = 20`) and has **no
+actor column**, though the file is named `audit-log-<date>.csv` and the code's own comment says "the
+export is what leaves the building during an audit." **Fix:** render a Why cell from
+`details.message` / `details.reason`; export the full filtered set with the actor column.
+
+### #221 (MEDIUM, PRE-EXISTING + MEDIUM introduced) Pausing the last active rule silently converts a closed gate into an open one
+The #207 guard keys on `isFallbackFromNoMatch`, which is set only for `no_match_no_fallback` — a TRUE
+zero-policy workspace is deliberately exempt and keeps its historical auto-approve. But the substance
+of the bypass still exists there: zero active rules + a financial approver + no manager approver + a
+threshold set ⇒ every under-threshold request auto-approves with no human review. **And the state is
+one unconfirmed click away:** `setPaused` on the last active rule flips the workspace from "#207
+refuses this request" to "the engine auto-approves it". This branch deleted `removeRetiredCriteria`
+for exactly this class ("one unconfirmed click silently widened routing"); the pause toggle is the
+worse instance and was left unconfirmed. The UI half is already honest (the Everything-else row now
+renders `everything_else_autoapprove_warning` for the no-rules case). **Fix:** confirm the pause of
+the LAST ACTIVE rule, or extend the guard's intent test from "has active rules" to "has ever
+configured a rule / has a threshold set" — a threshold is itself an expression of gating intent.
+
+### #222 (MEDIUM) Deploy-order violation would lose audit rows silently, and nothing detects it
+`resolve-approval-chain`'s `logActivity` (`:217-219`) swallows every insert error into
+`console.error`. Two activity types this branch writes — `chain_resolution_fallback_to_default`
+(`20260718140000`) and `chain_routing_rule_changed` (`20260719122000`) — are added to the
+`lease_activity_log` CHECK by migrations that exist ONLY on this branch and are NOT applied. Deploy
+the function before applying those migrations and every no-match fallback routes **successfully**
+while its audit row is silently rejected by the CHECK: routing fails closed, the **audit trail fails
+open and silent**. `docs/ROADMAP_TO_MARKET.md` STEP 4 has the ordering right, but nothing enforces it
+and nothing would report the violation. **Fix:** make the audit failure loud for these two types, or
+verify CHECK membership in the STEP-4 smoke check.
+
+### #223 (MEDIUM, PRE-EXISTING) `apply_policy_steps` is a SECURITY DEFINER hole around the read-only (Vault) tier
+`20260516120000_baseline_schema.sql:74-112` — correctly gated owner-or-admin inside the body, but it
+never re-asserts `public.is_workspace_live(...)`, so it bypasses the Vault V1 RESTRICTIVE policy on
+`approval_chain_steps`. An admin of a Vault / grace-window / soft-deleted workspace can still rewrite
+who approves money in a workspace the product has declared read-only. The NEW
+`set_approval_policy_order` on this branch gets this exactly right and documents why
+(`20260719121000:118-124`) — use it as the template. Also: `approver_user_id` is not validated against
+workspace membership.
+
 ### #216 (MEDIUM, audit readability) The Audit Log shows a label but no `details`, so #207 refusals read as system failures and dry runs read as real reroutes
 `src/pages/app/AuditLog.tsx` renders `ACTIVITY_LABELS[type]` with no reason/detail column. Three
 consequences now that #212 labelled everything: (a) `chain_resolution_failed` ("Approval routing
@@ -185,6 +281,12 @@ Spanish user is shown English whenever routing fails. Separately, `ambiguous_mat
 tie-break 409 that THIS BRANCH DELETED (ties now resolve deterministically to the older rule), so
 that key is stale on arrival. Found while verifying the #207 fix reached the user — not bundled
 into it, per the pre-existing-issues rule.
+**CONSTRAINT ADDED 2026-10-27 (security review):** the wire reason `no_match_no_fallback` is now
+deliberately shared by TWO causes — the original (no default approvers) and the #207 case
+(approvers exist but none required). The shipped copy says "no default approvers are set", which
+is FACTUALLY WRONG for the second. Whoever wires this must distinguish them (the audit row already
+carries `default_approvers_configured`) or render the server text, or they will ship wrong copy.
+
 **Fix:** map the wire `reason` to the locale key in `leaseSubmissionDecision` (falling back to the
 server string for unmapped reasons), delete `ambiguous_match`, and add a key for the #207
 "approvers assigned but none required" case so it is not English-only either.

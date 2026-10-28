@@ -64,7 +64,7 @@ reroute evaluation — so region rules CAN match once the region is filled in.
 later" note and DROP the destructive one-click remove; or (b) retire it anyway.
 **DONE when:** Daniel picks one and it is recorded in KNOWN_ISSUES #209.
 
-## STEP 3 — Close the remaining redesign findings  ·  STATUS: NOT STARTED
+## STEP 3 — Close the remaining redesign findings  ·  STATUS: ✅ DONE 2026-10-27
 **Scope is FROZEN. No new design ideas.** Fix exactly: **#208** (`hasAnyRules` counts paused rules,
 so the UI says BLOCKED where the engine AUTO-APPROVES), **#210** (hero inputs collapse at 1024px),
 **#211** (page skips `PageLayout`, duplicate CTA, hand-rolled amber instead of the `warning` token),
@@ -107,6 +107,17 @@ plan. **Neither is required to sell this.** Do not start either while any step a
 ---
 
 ## Progress log (append one line per completed step; never rewrite history)
+- 2026-10-27 — STEP 3 DONE. #208/#210/#211/#212 fixed and #209 implemented; five-reviewer sweep run
+  and folded. The sweep caught a lie I had introduced in STEP 1 (my new warning had no hasAnyRules
+  check, so it said "refused" where the engine AUTO-APPROVES — the #208 error in reverse) and that
+  approval_threshold DEFAULTS TO 0, which made it print "under $0.00" on a default workspace. Both
+  fixed. #210 was reopened: my first fix used a wrong sidebar width and made the inputs NARROWER at
+  the breakpoint (301px->154px); the split is now deleted entirely, giving 216-317px at every width.
+  Three of my new audit labels were wrong and are corrected against the product's own vocabulary.
+  Security proved the #207 fix CLEAN by exhaustive enumeration. Restored #213, which I had destroyed
+  with a careless slice. Filed #216-#223 rather than bundling — including **#218, a HIGH pre-existing
+  approval bypass WIDER than #207**: any editor can INSERT a lease already marked approved, because
+  the governance trigger is UPDATE-only. Suite 2118 green.
 - 2026-10-27 — STEP 2 DECIDED. Daniel explicitly delegated this call — he is not a developer and
   cannot evaluate implementation trade-offs, and said so. RETIRE region from authoring: a rule that
   can only match if an unrelated screen is edited later is a trap, not a capability. Authored values

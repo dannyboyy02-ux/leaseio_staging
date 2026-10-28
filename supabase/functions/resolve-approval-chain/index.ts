@@ -1441,6 +1441,16 @@ serve(async (req) => {
         has_manager_approver: hasManagerApprovers,
         has_financial_approver: hasFinancialApprovers,
         would_have_been: "approved",
+        // The three MUTABLE inputs the decision actually turned on. Without
+        // them this row cannot be reconstructed later: `approval_threshold` is
+        // workspace config an admin can change at any time and
+        // `calc_total_commitment` is recomputed as the lease is edited, so a
+        // reader six months on would see "would have been approved" with a
+        // financial approver present and no way to tell it was a $72k request
+        // against a $100k threshold.
+        total_cash_commitment: Number((lease as any).calc_total_commitment ?? 0),
+        approval_threshold: (ownership as any)?.approval_threshold ?? null,
+        covenant_flagged: Boolean((lease as any).covenant_flagged),
       });
       return jsonResponse(
         {
@@ -1466,6 +1476,10 @@ serve(async (req) => {
         legacy_status: legacyStatus,
         has_manager_approver: hasManagerApprovers,
         has_financial_approver: hasFinancialApprovers,
+        // Same reconstructability requirement as the refusal row above.
+        total_cash_commitment: Number((lease as any).calc_total_commitment ?? 0),
+        approval_threshold: (ownership as any)?.approval_threshold ?? null,
+        covenant_flagged: Boolean((lease as any).covenant_flagged),
       });
     }
 
