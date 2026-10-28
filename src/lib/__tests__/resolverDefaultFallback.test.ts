@@ -33,17 +33,60 @@ describe('#move1 — resolve-approval-chain default-approver fallback + determin
     );
   });
 
-  it('keeps the 409 ONLY when the no-match workspace has no default approvers', () => {
-    expect(src).toContain('isFallbackFromNoMatch && !hasDefaultApprovers');
-    // the surviving 409 still carries the mapped reason
+  // #207 (2026-10-27) — SUPERSEDES the original pin, which asserted
+  // `isFallbackFromNoMatch && !hasDefaultApprovers`. That guard asked whether
+  // the workspace had ANY default approver instead of whether the request would
+  // actually be REVIEWED, and it let a no-match request auto-approve with zero
+  // human review in a workspace that had configured approval rules (financial
+  // approver + no manager approver + commitment under the threshold).
+  //
+  // These assertions run against CODE WITH COMMENTS STRIPPED: the fix's own
+  // explanatory comment quotes the retired guard verbatim, so a naive
+  // `toContain` would match the prose and report the bug as still fixed.
+  const code = src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('//'))
+    .join('\n');
+
+  it('no longer gates on approver PRESENCE (the #207 bypass)', () => {
+    expect(code).not.toContain('isFallbackFromNoMatch && !hasDefaultApprovers');
+  });
+
+  it('gates the 409 on the resulting STATUS instead', () => {
+    expect(code).toContain('isFallbackFromNoMatch && legacyStatus === "approved"');
+  });
+
+  it('computes legacyStatus BEFORE the guard — the ordering IS the fix', () => {
+    const compute = code.indexOf('const legacyStatus = getInitialStatusAfterSubmission');
+    const guard = code.indexOf('isFallbackFromNoMatch && legacyStatus === "approved"');
+    expect(compute).toBeGreaterThanOrEqual(0);
+    expect(guard).toBeGreaterThanOrEqual(0);
+    // If someone moves the computation back below the guard, legacyStatus is
+    // undefined at the check and the bypass silently returns.
+    expect(compute).toBeLessThan(guard);
+  });
+
+  it('still 409s with the wire reason clients key on, and audits both causes', () => {
     const guard = sliceBetween(
       src,
-      'if (isFallbackFromNoMatch && !hasDefaultApprovers) {',
+      'if (isFallbackFromNoMatch && legacyStatus === "approved") {',
       '// Distinct audit row',
     );
+    // leaseSubmissionDecision.ts maps this wire reason to leave_draft and en/es
+    // carry its copy — it must NOT change.
     expect(guard).toContain('reason: "no_match_no_fallback"');
-    expect(guard).toContain('default_approvers_configured: false');
     expect(guard).toContain('409');
+    // the audit detail distinguishes the newly-caught cause from the old one
+    expect(guard).toContain('no_match_would_auto_approve');
+    expect(guard).toContain('default_approvers_configured: hasDefaultApprovers');
+    expect(guard).toContain('would_have_been: "approved"');
+  });
+
+  it('leaves a TRUE zero-policy workspace on its historical auto-approve path', () => {
+    // isFallbackFromNoMatch is set ONLY for no_match_no_fallback, so a workspace
+    // that never configured a rule is deliberately not caught by the guard.
+    expect(code).toContain('const isFallbackFromNoMatch = initialMatch.kind === "no_match_no_fallback"');
   });
 
   it('writes a distinct fallback-to-default audit activity', () => {

@@ -1393,26 +1393,8 @@ serve(async (req) => {
     const hasDefaultApprovers = hasManagerApprovers || hasFinancialApprovers;
     const isFallbackFromNoMatch = initialMatch.kind === "no_match_no_fallback";
 
-    // Loud, mapped failure: rules exist, nothing matched, and no default
-    // approvers to catch it. (A true zero-policy workspace keeps its historical
-    // auto-approve-when-no-roles behavior via the legacy body below.)
-    if (isFallbackFromNoMatch && !hasDefaultApprovers) {
-      await logActivity(leaseId, "chain_resolution_failed", {
-        reason: "no_match_no_fallback",
-        default_approvers_configured: false,
-      });
-      return jsonResponse(
-        {
-          ok: false,
-          reason: "no_match_no_fallback",
-          error:
-            "No matching approval rule and no default approvers are assigned. Ask an admin to assign default approvers or add a matching rule.",
-        },
-        409,
-        origin,
-      );
-    }
-
+    // Compute the legacy OUTCOME before the guard below — the guard keys on the
+    // resulting status, not on whether approvers merely exist. Order matters.
     const requirements = getApprovalRequirements({
       totalCashCommitment: Number((lease as any).calc_total_commitment ?? 0),
       approvalThreshold: (ownership as any)?.approval_threshold ?? null,
@@ -1421,6 +1403,57 @@ serve(async (req) => {
       covenantFlagged: Boolean((lease as any).covenant_flagged),
     });
     const legacyStatus = getInitialStatusAfterSubmission(requirements);
+
+    // #207 (HIGH, approval bypass) — GATE ON THE OUTCOME, NEVER ON PRESENCE.
+    //
+    // The previous guard was `isFallbackFromNoMatch && !hasDefaultApprovers`,
+    // which asked "does this workspace have ANY default approver?" instead of
+    // "would this request actually be reviewed by a human?". Those are not the
+    // same question. getApprovalRequirements only requires the MANAGER when a
+    // manager approver exists, and only requires FINANCIAL review when the
+    // commitment clears the threshold (or a covenant is flagged, or no
+    // threshold is set). So a workspace with a financial approver, NO manager
+    // approver, a $100k threshold and a $72k no-match request produced
+    // requiresManager=false + requiresFinancial=false -> 'approved', and the
+    // lease auto-approved with ZERO human review — in a workspace that had
+    // explicitly configured approval rules. The old guard let it through
+    // because an approver existed; it just was not required.
+    //
+    // Keying on `legacyStatus === "approved"` is strictly safer AND subsumes
+    // the old condition: with no approvers at all, requiresManager and
+    // requiresFinancial are both false, so legacyStatus is already 'approved'.
+    //
+    // A TRUE zero-policy workspace is deliberately NOT caught here —
+    // `isFallbackFromNoMatch` is only set for `no_match_no_fallback`, so a
+    // workspace that never configured any rule keeps its historical
+    // auto-approve-when-no-roles behavior via the legacy body below. The line
+    // being drawn is intent: configuring rules expresses gating intent.
+    //
+    // The WIRE reason stays `no_match_no_fallback` — leaseSubmissionDecision.ts
+    // maps it to leave_draft and en/es carry its user-facing copy. Only the
+    // audit detail distinguishes the two causes.
+    if (isFallbackFromNoMatch && legacyStatus === "approved") {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: hasDefaultApprovers
+          ? "no_match_would_auto_approve"
+          : "no_match_no_fallback",
+        default_approvers_configured: hasDefaultApprovers,
+        has_manager_approver: hasManagerApprovers,
+        has_financial_approver: hasFinancialApprovers,
+        would_have_been: "approved",
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          reason: "no_match_no_fallback",
+          error: hasDefaultApprovers
+            ? "This request matches no approval rule, and your default approvers would not be required to review it — so it would be approved with nobody looking at it. Ask an admin to add a matching rule, assign a manager approver, or lower the approval threshold."
+            : "No matching approval rule and no default approvers are assigned. Ask an admin to assign default approvers or add a matching rule.",
+        },
+        409,
+        origin,
+      );
+    }
 
     // Distinct audit row when we FELL BACK from a no-match (vs. the workspace
     // simply having zero policies). Service-role write — bypasses the

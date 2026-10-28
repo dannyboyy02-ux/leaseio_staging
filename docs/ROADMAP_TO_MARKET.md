@@ -46,7 +46,7 @@ message) and push it to origin.
 **DONE when:** `git status --porcelain` is clean AND the branch exists on origin
 (`git rev-parse --abbrev-ref @{u}` resolves).
 
-## STEP 1 — Fix the security regression (#207)  ·  STATUS: NOT STARTED
+## STEP 1 — Fix the security regression (#207)  ·  STATUS: ✅ DONE 2026-10-27
 **Why:** a lease request can approve itself with ZERO human review in a workspace that explicitly
 turned approval gating on. Introduced by this branch (before it, the same case returned 409).
 **Do:** `supabase/functions/resolve-approval-chain/index.ts` ~line 1399 — move the
@@ -107,6 +107,16 @@ plan. **Neither is required to sell this.** Do not start either while any step a
 ---
 
 ## Progress log (append one line per completed step; never rewrite history)
+- 2026-10-27 — STEP 1 DONE. #207 closed: the no-match guard now keys on the resulting STATUS
+  (`legacyStatus === "approved"`) instead of approver presence, and the computation moved above
+  the guard. The new predicate SUBSUMES the old one. Wire reason `no_match_no_fallback` kept
+  unchanged (leaseSubmissionDecision maps it to leave_draft; en/es carry its copy); only the audit
+  detail distinguishes the two causes. Added `approvalBypass207.test.ts` — 7 behavioural tests on
+  the pure routing helpers proving the bypass scenario returns 'approved' (so must be refused) and
+  that genuinely-reviewed requests still route. Rewrote the stale pin in resolverDefaultFallback,
+  asserting against comment-stripped code and pinning the compute-before-guard ORDER. Added the
+  third truth to ApprovalEverythingElseRow + its en/es key. Filed #213 (unwired routing-failure
+  translations) rather than bundling it. Suite 2118 green (+11), typecheck clean, mirror parity green.
 - 2026-10-27 — STEP 0 DONE. Branch committed in two parts and pushed to origin
   (`9cb4802` the blocked redesign, honestly labelled; `d7dbd70` the doc reconciliation +
   this roadmap). Working tree clean, upstream = origin/approval-simplify, 0 ahead / 0 behind.

@@ -97,6 +97,19 @@ app page because it does not use `PageLayout` (26 other pages do; adoption is pi
 a red/amber split on one semantic, where the app already ships a `warning` token. The D-Q2
 disclosure is built twice in two design languages on adjacent screens.
 
+### #213 (MEDIUM, i18n + stale copy) The translated routing-failure messages are shipped but UNWIRED — Spanish users get English, and one key describes a deleted outcome
+`workflow.routing_failure.{generic,ambiguous_match,no_match_no_fallback,separation_violation}`
+exist in BOTH locale files (added by the `e0de113` locale batch) but **nothing in `src/` references
+them** — verified by grep. `leaseSubmissionDecision.ts:120` renders `chainResult.error`, the
+server's English string, straight into the toast. So the translated copy is dead weight and a
+Spanish user is shown English whenever routing fails. Separately, `ambiguous_match` describes the
+tie-break 409 that THIS BRANCH DELETED (ties now resolve deterministically to the older rule), so
+that key is stale on arrival. Found while verifying the #207 fix reached the user — not bundled
+into it, per the pre-existing-issues rule.
+**Fix:** map the wire `reason` to the locale key in `leaseSubmissionDecision` (falling back to the
+server string for unmapped reasons), delete `ambiguous_match`, and add a key for the #207
+"approvers assigned but none required" case so it is not English-only either.
+
 ### #212 (HIGH, audit) The three new activity types render as raw snake_case in the Audit Log
 `src/pages/app/AuditLog.tsx:66` — `chain_resolution_fallback_to_default`,
 `chain_routing_rule_changed` and the retirement event have no display mapping and cannot be

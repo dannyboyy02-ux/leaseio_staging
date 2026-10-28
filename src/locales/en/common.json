@@ -3967,7 +3967,8 @@
       "everything_else_always_last": "Always last",
       "everything_else_no_signing": "No signing step — leases routed here skip \"sign the deal\".",
       "everything_else_auto_title": "Nobody is reviewing lease requests",
-      "page_teaching": "Describe a lease below and see exactly who has to sign off on it. The rules underneath are the explanation for that answer."
+      "page_teaching": "Describe a lease below and see exactly who has to sign off on it. The rules underneath are the explanation for that answer.",
+      "everything_else_unreviewed_warning": "No manager approver is set, so a request under {{amount}} that matches no rule has nobody required to review it. Those requests are refused at submission rather than approved — assign a manager approver, or add a rule that covers them."
     },
     "sentence": {
       "when_someone_requests": "When someone requests",

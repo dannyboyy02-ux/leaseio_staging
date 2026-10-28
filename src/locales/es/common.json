@@ -3967,7 +3967,8 @@
       "page_teaching": "Describa un arrendamiento abajo y vea exactamente quién debe autorizarlo. Las reglas de abajo son la explicación de esa respuesta.",
       "paused_badge": "En pausa",
       "paused_explainer": "En pausa: las solicitudes como esta pasan a la siguiente regla que encaje.",
-      "turn_on": "Activar"
+      "turn_on": "Activar",
+      "everything_else_unreviewed_warning": "No hay un aprobador de gerencia asignado, así que una solicitud por debajo de {{amount}} que no coincida con ninguna regla no tiene a nadie obligado a revisarla. Esas solicitudes se rechazan al enviarlas en lugar de aprobarse: asigne un aprobador de gerencia o agregue una regla que las cubra."
     },
     "sentence": {
       "when_someone_requests": "Cuando alguien solicita",

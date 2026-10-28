@@ -16,11 +16,17 @@
 // So this row composes its own copy from `describeApprover` on its two slots,
 // exactly as approvalDescribe's own doc comment instructs.
 //
-// THE TWO TRUTHS THIS ROW MUST NOT CONFUSE (security-relevant):
+// THE THREE TRUTHS THIS ROW MUST NOT CONFUSE (security-relevant):
 //   • no rules AND no default approvers → the engine AUTO-APPROVES. The gate
 //     is standing open. Different verb, different sentence.
 //   • rules exist, none match, no default approvers → the engine 409s and the
 //     request is BLOCKED at submission.
+//   • rules exist, none match, approvers ARE assigned but none would be
+//     REQUIRED (no manager approver + the commitment is under the threshold) →
+//     since #207 the engine 409s here too. Before that fix this case silently
+//     auto-approved, because the guard asked whether approvers EXISTED rather
+//     than whether anyone was required to look. Assigning a financial approver
+//     is NOT by itself proof that a request gets reviewed.
 // Telling an admin "blocked" in the state that actually auto-approves would be
 // the single worst copy error on this page.
 //
@@ -176,6 +182,20 @@ export function ApprovalEverythingElseRow({
           {financialFilled && thresholdAmount && (
             <RowNote icon={Info} tone="muted">
               {t('workflow.request.review_threshold', { amount: thresholdAmount })}
+            </RowNote>
+          )}
+
+          {/* THIRD TRUTH (#207). A financial approver alone does not guarantee
+              review: financial review is only REQUIRED once the commitment
+              clears the threshold, and with no manager approver an unmatched
+              request under it has nobody required to look. The engine refuses
+              those at submission rather than approving them — say so here, or
+              an admin reads "financial approver assigned" as "covered". */}
+          {financialFilled && !managerFilled && thresholdAmount && (
+            <RowNote icon={AlertTriangle} tone="caution">
+              {t('policy_editor.list.everything_else_unreviewed_warning', {
+                amount: thresholdAmount,
+              })}
             </RowNote>
           )}
 
