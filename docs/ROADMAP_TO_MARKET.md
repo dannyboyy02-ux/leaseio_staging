@@ -56,7 +56,7 @@ turned approval gating on. Introduced by this branch (before it, the same case r
 weak guard. Add the third truthful state to `ApprovalEverythingElseRow`.
 **DONE when:** a test proves the auto-approve case now 409s, full suite green, typecheck clean.
 
-## STEP 2 — Daniel answers the open decision (#209)  ·  STATUS: BLOCKED ON DANIEL
+## STEP 2 — the open decision (#209)  ·  STATUS: ✅ DECIDED 2026-10-27 (by Claude, delegated)
 **Why:** D-Q2 (retire region from rule authoring) was ratified on a premise that turned out FALSE.
 Claude said `leases.region` is never written; `LeaseReview.tsx:730` writes it, and region triggers
 reroute evaluation — so region rules CAN match once the region is filled in.
@@ -107,6 +107,13 @@ plan. **Neither is required to sell this.** Do not start either while any step a
 ---
 
 ## Progress log (append one line per completed step; never rewrite history)
+- 2026-10-27 — STEP 2 DECIDED. Daniel explicitly delegated this call — he is not a developer and
+  cannot evaluate implementation trade-offs, and said so. RETIRE region from authoring: a rule that
+  can only match if an unrelated screen is edited later is a trap, not a capability. Authored values
+  preserved read-only, the FALSE explanation corrected, and the destructive one-click 'remove filter'
+  deleted (it silently widened routing). #214 filed to add region at intake if a customer ever asks.
+  NOTE FOR FUTURE SESSIONS: do not bring Daniel implementation choices. Decide them. Bring him
+  money, scope, timeline, who-we-sell-to, and anything irreversible.
 - 2026-10-27 — STEP 1 DONE. #207 closed: the no-match guard now keys on the resulting STATUS
   (`legacyStatus === "approved"`) instead of approver presence, and the computation moved above
   the guard. The new predicate SUBSUMES the old one. Wire reason `no_match_no_fallback` kept

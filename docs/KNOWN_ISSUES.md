@@ -70,7 +70,7 @@ requests are blocked, while the engine auto-approves them. Found independently b
 lease-code-auditor and lease-product-polish; adversarially confirmed. Fix: derive the predicate
 from ACTIVE rules.
 
-### #209 (HIGH, decision made on a false premise) D-Q2 retired region on the claim that `leases.region` is never written — it IS written
+### #209 (HIGH, decision made on a false premise) D-Q2 retired region on the claim that `leases.region` is never written — it IS written — DECIDED 2026-10-27 (retire region, correct the reasoning)
 `src/lib/approvalDescribe.ts:956` carries the premise "intake never collects region or lease type
 … so `leases.region` and `leases.lease_type` are always NULL and any rule keyed on them can never
 match." The intake half is true (`LeaseRequestForm` has zero region references; its lease INSERT
@@ -81,7 +81,40 @@ evaluation. So region rules are not dead: they cannot match at FIRST submission,
 once the region is filled in. The shipped UI additionally offers a one-click "remove the region
 filter" that destroys authored criteria with no undo and **silently widens what the rule routes**.
 `lease_type` does appear genuinely unwritten, so that half stands.
-**Owner decision required** — the ratified D-Q2 rests on the incorrect half.
+**DECIDED 2026-10-27 — RETIRE region from authoring. Outcome unchanged from D-Q2; the
+REASONING is replaced.** The owner explicitly delegated this call (he is not a developer and
+cannot evaluate the trade-off); decided on his behalf, in his interest.
+
+Rationale: a region-keyed rule cannot match at SUBMISSION, because intake never collects region.
+It can only match later, if somebody edits region in the review workbench AND a material-change
+reroute fires. A routing rule that works conditionally, based on whether an unrelated screen was
+edited afterward, is not a capability — it is a trap that an admin will build real approval
+policy on top of. That is the exact failure mode this redesign exists to remove, and a disclaimer
+does not fix it. Keeping it would mean shipping behaviour we cannot explain in one sentence.
+
+As decided:
+  1. Region is removed from rule AUTHORING. The DB columns and all authored values are PRESERVED
+     — nothing is deleted.
+  2. Existing authored region values render READ-ONLY with CORRECTED copy. The current text
+     ("lease requests never include a region") is FALSE and is what caused this error; it must say
+     requests do not include a region *at submission*, so the rule will not match there.
+  3. The one-click "remove the region filter" is DELETED. Reviewers found it destroys authored
+     criteria with no undo AND silently WIDENS what the rule routes (more leases match). Changing
+     who approves money is never a one-click, no-undo action. This was dangerous under either
+     decision.
+  4. `lease_type` remains retired — it is genuinely never written anywhere.
+  5. Follow-on filed below (#214) so the capability is recoverable if a customer needs it.
+
+Blast radius: all four rules in the live staging workspace matched on asset type or department
+when walked 2026-08-02; none used region.
+
+### #214 (ENHANCEMENT, deferred — do NOT build speculatively) Collect region at intake so regional routing can be offered honestly
+The matcher already supports `match_regions`, and `workspaces.region_options` already exists — the
+only missing piece is that `LeaseRequestForm` does not ask for region, so `leases.region` is NULL
+at submission (#209). If a customer actually needs regional approval routing: add region to the
+intake form (optional, driven by `region_options`), then un-retire the filter in rule authoring.
+**Do not build this until a real customer asks.** The intake form is a conversion surface and
+should not grow fields speculatively.
 
 ### #210 (HIGH, layout) Answer-strip hero collapses its three inputs at common laptop widths
 `src/components/settings/ApprovalAnswerStrip.tsx:198` — the fixed 400px answer column leaves the
