@@ -5,6 +5,112 @@ list and reference it in the commit message.
 
 ---
 
+## Approval Rules redesign — IN FLIGHT, UNCOMMITTED, BLOCKED (branch `approval-simplify`) — #207–#212
+
+**Status as of 2026-10-27: ~50 uncommitted files sitting in the working tree since 2026-08-14.**
+Branch is `origin/main` + 1 commit (`e0de113`, the 84-key locale batch) + the uncommitted
+redesign. Never pushed; no PR. `npm run typecheck` clean, full suite green (2107 tests, 156
+files), `check:mirror-parity` green (the directional-JSDoc drift was fixed 2026-10-27).
+
+**What it is.** A redesign of the Approval Rules surface, driven by the owner's verdict
+(2026-08-02): *"I am confused by the whole thing… What is 100? Is any user who comes in going to
+understand this and its purpose? I doubt it."* A 4-concept design panel (judged on learnability /
+truthfulness / build cost) selected **"Who approves what"**: the page answers *"who approves a
+$200k warehouse lease?"* before the user touches anything, and the rules below explain that
+answer. The user-facing `priority` integer is deleted (order becomes visible list position,
+written only by the new `set_approval_policy_order` RPC); a permanent "Everything else" row shows
+where unmatched requests go; role steps resolve to **humans** via `describeApprover` (they used to
+render "Anyone with role", and the tester printed a raw UUID, `User 3f8a2b1c…`).
+
+**Owner-ratified decisions (binding):** D-Q1 retire `is_default_fallback` as a routing mechanism
+(engine + preview RPC); D-Q2 retire region + lease_type from authoring (**see #209 — this one was
+ratified on a FALSE premise I supplied**); D-Q3 fix the solo-admin default-approver dead end;
+D-Q4 evidence-gated rule delete; D-Q5 in-flight routing re-evaluates on material change and is
+DISCLOSED, never frozen.
+
+**7 migrations written, NONE applied.** Apply order is load-bearing:
+`20260718130000` → `20260718140000` → `20260718150000` → `20260719120000` (version trigger stops
+keying on `priority`) → `20260719120100` (retire `is_default_fallback` + preview RPC superset) →
+`20260719121000` (`set_approval_policy_order`) → `20260719122000`. `resolve-approval-chain` is
+edited but **NOT deployed** — and the migrate-then-redeploy window fails CLOSED for workspaces
+whose fallback rule carried match criteria, so the redeploy must follow immediately.
+
+**Reviewer sweep ran 2026-08-02 (6 reviewers + adversarial verification of every Critical/High).
+Three reviewers returned BLOCK.** The adversarial pass REFUTED four findings — unaudited
+hard-delete (real but Low/pre-existing class), "legacy fallback writes no attribute snapshot"
+(path not executable), "signator inheritance bypasses SoD" (that is the contract-pinned D2
+decision), and "D-Q5 disclosure has no UI" (server-to-server field; no browser caller can reach a
+`true`). Those are NOT filed as issues. The surviving findings are #207–#212 below.
+
+### #207 (HIGH, security REGRESSION, blocks apply) No-match → legacy default-approver fallback can silently AUTO-APPROVE in a workspace that HAS approval rules
+`supabase/functions/resolve-approval-chain/index.ts:1399` — the guard is
+`if (isFallbackFromNoMatch && !hasDefaultApprovers)`, which keys on approver **presence**, not on
+the **outcome**. `getApprovalRequirements` / `getInitialStatusAfterSubmission`
+(`_shared/approval_routing.ts`) run AFTER it. Concrete: workspace has `approval_threshold`
+$100,000, a `financial_approver`, NO `manager_approver`, and rules covering Real Estate + IT. A
+$72k vehicle lease matches no rule → requiresManager=false, requiresFinancial = 72000 >= 100000 =
+false → lifecycle flips to **`approved` with zero human review**, in a workspace that explicitly
+configured gating. The branch's own comment two lines above states the opposite intent ("a
+workspace with rules has expressed gating intent, so silently auto-approving there would be an
+approval bypass"). **Introduced by the D1 change in this branch** — before it, a no-match in a
+rules workspace returned 409. `resolverDefaultFallback.test.ts:37` pins the weak guard, so this
+is the implemented design, not a typo. Confirmed independently by lease-security-scanner,
+lease-repository-integrity-reviewer, the adversarial verifier, and by hand.
+**Fix:** compute `legacyStatus` BEFORE the guard and 409 when
+`isFallbackFromNoMatch && legacyStatus === 'approved'` (keep the existing `!hasDefaultApprovers`
+409 too); update the pinning test; add the third truth to `ApprovalEverythingElseRow`.
+**This is the gate — do not apply the migrations or redeploy the resolver until it is closed.**
+
+### #208 (HIGH, lying UI) `hasAnyRules` counts PAUSED rules, so the "Everything else" row says BLOCKED in the exact state the engine AUTO-APPROVES
+`src/pages/settings/ApprovalPoliciesListPage.tsx:446` passes `hasAnyRules={policies.length > 0}`;
+the policies query filters only `workspace_id` (paused rules must stay listed — the row menu
+toggles `is_active`). The engine filters `.eq("is_active", true)` and returns the zero-rule
+outcome for a paused-only workspace. So a workspace whose only rules are paused is told its
+requests are blocked, while the engine auto-approves them. Found independently by
+lease-code-auditor and lease-product-polish; adversarially confirmed. Fix: derive the predicate
+from ACTIVE rules.
+
+### #209 (HIGH, decision made on a false premise) D-Q2 retired region on the claim that `leases.region` is never written — it IS written
+`src/lib/approvalDescribe.ts:956` carries the premise "intake never collects region or lease type
+… so `leases.region` and `leases.lease_type` are always NULL and any rule keyed on them can never
+match." The intake half is true (`LeaseRequestForm` has zero region references; its lease INSERT
+writes only `asset_type` + `requesting_department`) — **but `LeaseReview.tsx:730` writes
+`region` in a direct `leases` UPDATE**, backed by an editable input fed from
+`workspaces.region_options`. `region` is also one of the five attributes that trigger reroute
+evaluation. So region rules are not dead: they cannot match at FIRST submission, but can match
+once the region is filled in. The shipped UI additionally offers a one-click "remove the region
+filter" that destroys authored criteria with no undo and **silently widens what the rule routes**.
+`lease_type` does appear genuinely unwritten, so that half stands.
+**Owner decision required** — the ratified D-Q2 rests on the incorrect half.
+
+### #210 (HIGH, layout) Answer-strip hero collapses its three inputs at common laptop widths
+`src/components/settings/ApprovalAnswerStrip.tsx:198` — the fixed 400px answer column leaves the
+three hero inputs ~76px at a 1024px viewport (~28px with a widened sidebar). This is the page's
+hero, at first paint. Found by lease-layout-design-reviewer (Critical) and lease-product-polish
+(High).
+
+### #211 (HIGH, design-system drift) The new list page declines the shared layout primitives
+`ApprovalPoliciesListPage.tsx:291/311` — hand-rolls a second page header below the back link,
+renders the same "New rule" CTA twice in two variants, and sits 128px narrower than every other
+app page because it does not use `PageLayout` (26 other pages do; adoption is pinned by
+`pageLayoutAdoption.test.ts`). `ApprovalRowPrimitives.tsx:28` hand-rolls five amber variants plus
+a red/amber split on one semantic, where the app already ships a `warning` token. The D-Q2
+disclosure is built twice in two design languages on adjacent screens.
+
+### #212 (HIGH, audit) The three new activity types render as raw snake_case in the Audit Log
+`src/pages/app/AuditLog.tsx:66` — `chain_resolution_fallback_to_default`,
+`chain_routing_rule_changed` and the retirement event have no display mapping and cannot be
+filtered. The D-Q5 disclosure work is only as good as its readability in the log.
+
+**Deflated by the adversarial pass (fix, but not gates):** rule rows flash a destructive "this
+rule would block the request" on every load because the steps query is outside the render gate and
+has no error branch (Medium); "Pick who approves" — the recovery path from the most destructive
+state — navigates to an inert `?highlight=` param nothing reads (Medium); the answer strip and the
+chain diagram describe the same draft with opposite parallel semantics (Medium; the underlying
+authoring-shape defect is pre-existing and deserves its own entry).
+
+---
+
 ## Customer-facing live audit 2026-08-11 (prod `main @ 8ed16aa`, walkthrough persona) — #187–#195
 
 Full live walkthrough on theleaseio.com as an admin customer: requestor chain end-to-end,
@@ -295,13 +401,21 @@ null → blank "Type" on the Leases list + CSV, while the request-flow twin show
 Type was inferable from the document. **Fix:** infer/persist asset_type in the direct-upload
 `process_lease` path. Verified live 2026-08-11.
 
-### #193 (DOC DRIFT) Self-serve firm onboarding is BUILT but docs say "not built"
+### #193 (DOC DRIFT) Self-serve firm onboarding is BUILT but docs say "not built" — RESOLVED 2026-10-27
 CLAUDE.md (Phase-10 deferred list) + #105 describe self-serve firm onboarding / firm Stripe
 checkout as deferred and firms as "operator-created only". Git shows PR #55/#56 (June 2026)
 shipped self-serve `create-firm` + hosted checkout, and the deployed `create-firm` is self-serve
 for any authenticated user (per-owner cap of 10). **Action:** reconcile CLAUDE.md + #105 to
 reflect shipped capability; re-scope whatever genuinely remains. Confirmed via git + function
 source 2026-08-11.
+
+**RESOLVED 2026-10-27.** Re-verified: `create-firm/index.ts:5` says "SELF-SERVE — any
+authenticated user may" with a per-owner cap of 10 (`:51-57`, #107); `/app/firm/onboarding`
+is routed (`App.tsx:170`); `create-firm-checkout` is called from `FirmOnboarding.tsx` and
+`FirmBilling.tsx`; `create-firm-subscription` + `create-firm-workspace` + `firm-billing-reconcile`
+all exist. CLAUDE.md corrected in three places (build-cadence paragraph + the Phase-10 bullet +
+the deferred list). What genuinely remains of #105: the live-mode Business price (operator,
+STOP 7) and `billing_summary_mode` invoice line-items.
 
 ---
 
