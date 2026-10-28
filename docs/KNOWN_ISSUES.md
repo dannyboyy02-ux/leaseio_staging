@@ -154,10 +154,47 @@ undocumented, so every new surface re-derives it and reviewers flag correct code
 chip-vs-text rule in CLAUDE.md's layout-system section. Pre-existing and app-wide — explicitly NOT
 bundled into the approval redesign.
 
-### #212 (HIGH, audit) The three new activity types render as raw snake_case in the Audit Log
+### #216 (MEDIUM, audit readability) The Audit Log shows a label but no `details`, so #207 refusals read as system failures and dry runs read as real reroutes
+`src/pages/app/AuditLog.tsx` renders `ACTIVITY_LABELS[type]` with no reason/detail column. Three
+consequences now that #212 labelled everything: (a) `chain_resolution_failed` ("Approval routing
+failed") is what a #207 policy REFUSAL writes — an auditor reads a system fault where the product
+correctly held a request in draft; the distinguishing `reason`
+(`no_match_would_auto_approve` vs `no_match_no_fallback`) lives in `details` and is never shown.
+(b) `reroute_audit_run` ("Routing audit run") is a DRY RUN that changes nothing, but reads as an
+actual reroute. (c) `chain_rerouted` / `chain_routing_rule_changed` / `chain_reroute_skipped_no_match`
+are three near-identical phrases with no from/to rule name to tell them apart.
+**Fix:** render a one-line summary from `details` for `chain_*` rows (reason, and the prior/new rule
+name where present), reword `reroute_audit_run` to say "dry run", and sort the ~55-entry type filter.
+
+### #217 (MEDIUM, dead end) Every "assign default approvers" CTA lands on a page that never scrolls to the thing it promised
+`src/pages/settings/ApprovalPoliciesListPage.tsx:83` — `APPROVAL_ROLES_HREF` ends in
+`?highlight=approval-roles`, and nothing in `src/` reads a `highlight` param (verified by grep; the
+only matches are unrelated PDF-viewer code). Every route out of the page's most destructive state —
+the red "nobody is assigned" CTA, the row button, the hero's "pick people" — lands on the Users tab
+with the Members panel first and the Approval Roles card below the fold, unhighlighted. The #207
+refusal message also tells an admin to "lower the approval threshold", a setting on a DIFFERENT
+WorkspaceSettings tab that this page never links to. **Fix:** honour the param (scroll + highlight)
+or add an anchor id, and link the threshold where it is named.
+
+### #213 (MEDIUM, i18n + stale copy) The translated routing-failure messages are shipped but UNWIRED — Spanish users get English, and one key describes a deleted outcome
+`workflow.routing_failure.{generic,ambiguous_match,no_match_no_fallback,separation_violation}`
+exist in BOTH locale files (added by the `e0de113` locale batch) but **nothing in `src/` references
+them** — verified by grep. `leaseSubmissionDecision.ts:120` renders `chainResult.error`, the
+server's English string, straight into the toast. So the translated copy is dead weight and a
+Spanish user is shown English whenever routing fails. Separately, `ambiguous_match` describes the
+tie-break 409 that THIS BRANCH DELETED (ties now resolve deterministically to the older rule), so
+that key is stale on arrival. Found while verifying the #207 fix reached the user — not bundled
+into it, per the pre-existing-issues rule.
+**Fix:** map the wire `reason` to the locale key in `leaseSubmissionDecision` (falling back to the
+server string for unmapped reasons), delete `ambiguous_match`, and add a key for the #207
+"approvers assigned but none required" case so it is not English-only either.
+
+### #212 (HIGH, audit) The three new activity types render as raw snake_case in the Audit Log — RESOLVED 2026-10-27 (widened to all 16)
 `src/pages/app/AuditLog.tsx:66` — `chain_resolution_fallback_to_default`,
 `chain_routing_rule_changed` and the retirement event have no display mapping and cannot be
 filtered. The D-Q5 disclosure work is only as good as its readability in the log.
+
+**RESOLVED 2026-10-27 — deliberately WIDENED from 3 types to 16.** On inspection the approval engine writes 16 activity types and only ONE (`final_review_returned_to_negotiation`) had a label, so the whole compliance surface rendered raw tokens. Added all 15 missing `ACTIVITY_LABELS` entries plus `audit.activity_types.*` keys in en+es. Display-only with a `defaultValue` fallback, so zero behavioural risk, and splitting it across sessions would have cost more than doing it once. **Still open, filed separately:** the Audit Log shows only the label and no `details`, so `chain_resolution_failed` reads as a system failure when it is now a policy-driven #207 refusal, and `reroute_audit_run` reads as a real reroute when it is a dry run — see #216.
 
 **Deflated by the adversarial pass (fix, but not gates):** rule rows flash a destructive "this
 rule would block the request" on every load because the steps query is outside the render gate and

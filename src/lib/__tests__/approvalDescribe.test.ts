@@ -64,12 +64,16 @@ const PROPOSED_DESCRIBE_EN: Record<string, string> = {
   shadowed_warning: 'Never used — «{{name}}» above already covers everything this rule covers.',
   impossible_range_warning:
     'The lowest amount in this rule is higher than the highest, so no request can match it.',
+  // #209 — region copy CORRECTED. It used to claim a region rule "will never be
+  // used"; that is false. LeaseReview.tsx:730 writes `leases.region` and region
+  // triggers a reroute, so a region rule CAN apply later — just never at
+  // submission. `lease_type` is genuinely never written, so "never" stands there.
   retired_region_warning:
-    "This rule only fits requests with a region, and lease requests don't ask for one — so it will never be used.",
+    "Lease requests don't include a region when they're submitted, so this rule won't apply then. It can apply later, only if someone fills in the region on the lease.",
   retired_lease_type_warning:
-    "This rule only fits requests with a lease type, and lease requests don't ask for one — so it will never be used.",
+    "This rule only fits requests with a lease type, and lease requests never carry one \u2014 so it will never be used.",
   retired_both_warning:
-    'This rule only fits requests with a region and a lease type, and lease requests ask for neither — so it will never be used.',
+    "This rule needs a lease type, which lease requests never carry \u2014 so it will never be used. Its region filter also wouldn't apply at submission.",
 };
 
 const en = JSON.parse(JSON.stringify(enCommon)) as any;
@@ -901,7 +905,7 @@ describe('describeRetiredCriteria', () => {
     expect(r.dimensions).toEqual(['region']);
     expect(r.regions).toEqual(['West', 'East']);
     expect(r.warning).toBe(
-      "This rule only fits requests with a region, and lease requests don't ask for one — so it will never be used.",
+      "Lease requests don't include a region when they're submitted, so this rule won't apply then. It can apply later, only if someone fills in the region on the lease.",
     );
   });
 
@@ -910,7 +914,7 @@ describe('describeRetiredCriteria', () => {
     expect(r.dimensions).toEqual(['lease_type']);
     expect(r.leaseTypes).toEqual(['Real Estate']);
     expect(r.warning).toBe(
-      "This rule only fits requests with a lease type, and lease requests don't ask for one — so it will never be used.",
+      "This rule only fits requests with a lease type, and lease requests never carry one \u2014 so it will never be used.",
     );
   });
 
@@ -921,7 +925,7 @@ describe('describeRetiredCriteria', () => {
     });
     expect(r.dimensions).toEqual(['region', 'lease_type']);
     expect(r.warning).toBe(
-      'This rule only fits requests with a region and a lease type, and lease requests ask for neither — so it will never be used.',
+      "This rule needs a lease type, which lease requests never carry \u2014 so it will never be used. Its region filter also wouldn't apply at submission.",
     );
   });
 

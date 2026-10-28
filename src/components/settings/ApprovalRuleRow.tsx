@@ -39,7 +39,6 @@ import {
   describeRetiredCriteria,
   type DescribableStep,
   type MemberLike,
-  type RetiredDimension,
   type RoleHolderMap,
   type RuleOverlapInfo,
 } from '@/lib/approvalDescribe';
@@ -158,6 +157,18 @@ export function ApprovalRuleRow({
       : null;
   const neverFires = Boolean(overlap?.neverFires) || Boolean(retired.warning);
 
+  // #209 — "Never used" is only TRUE when the rule is genuinely unreachable.
+  // A rule retired on REGION alone is not: intake doesn't collect region, so it
+  // can't match at submission, but `LeaseReview.tsx:730` writes `leases.region`
+  // and region triggers a reroute — so it CAN apply later. `lease_type` is
+  // genuinely never written, so a rule needing one really is dead. Shadowed
+  // rules (an earlier rule fully covers them) are dead too.
+  const onlyRegionRetired =
+    Boolean(retired.warning) &&
+    !overlap?.neverFires &&
+    retired.dimensions.length === 1 &&
+    retired.dimensions[0] === 'region';
+
   const rowLabel = showOrdinal
     ? `${t('common.edit')}: ${policy.name}. ${t('policy_editor.order.checked_position', {
         n: ordinal,
@@ -215,8 +226,20 @@ export function ApprovalRuleRow({
             className="gap-1 text-[10px] font-normal text-amber-700 dark:text-amber-400"
           >
             <AlertTriangle className="h-3 w-3" aria-hidden="true" />
-            <span className="sr-only">{t('policy_editor.list.never_used_aria')}</span>
-            <span aria-hidden="true">{t('policy_editor.list.never_used_badge')}</span>
+            <span className="sr-only">
+              {t(
+                onlyRegionRetired
+                  ? 'policy_editor.list.not_at_submission_aria'
+                  : 'policy_editor.list.never_used_aria',
+              )}
+            </span>
+            <span aria-hidden="true">
+              {t(
+                onlyRegionRetired
+                  ? 'policy_editor.list.not_at_submission_badge'
+                  : 'policy_editor.list.never_used_badge',
+              )}
+            </span>
           </Badge>
         )}
       </div>
@@ -267,10 +290,7 @@ export function ApprovalRuleRow({
         />
       )}
 
-      <RetiredCriteriaBlock
-        report={retired}
-        disabled={busy}
-      />
+      <RetiredCriteriaBlock report={retired} />
     </RowShell>
   );
 }

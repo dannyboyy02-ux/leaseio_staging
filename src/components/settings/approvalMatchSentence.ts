@@ -6,7 +6,9 @@
 // Region and lease type are NOT in this sentence. They are retired (D-Q2):
 // intake never collects them, so a sentence that stated them would describe a
 // filter no real lease request can satisfy. Authored values are preserved and
-// reported separately as DEAD criteria, with a one-click removal.
+// reported separately as DEAD criteria, read-only (#209 removed the one-click
+// removal — clearing a filter WIDENS what a rule routes, so it is a deliberate
+// edit made in the rule editor, behind Save).
 //
 // Renders through the i18next singleton at call time — any memoized caller
 // must include the active language in its cache key.

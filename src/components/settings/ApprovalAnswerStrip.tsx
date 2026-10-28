@@ -195,19 +195,22 @@ export function ApprovalAnswerStrip({
   const body = (
     <div
       className={cn(
-        'grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]',
-        // Inputs first, answer second: below the split the answer stacks BELOW
-        // its own controls, so it is never an empty box above the thing that
-        // fills it. `minmax(0,1fr)` lets long prose wrap instead of overflowing.
+        'grid gap-5',
+        // #210 — THERE IS NO SIDE-BY-SIDE SPLIT, deliberately. Inputs sit above
+        // a full-width answer at every width.
         //
-        // #210 — the split is `xl` (1280px), NOT `lg`. This page sits beside a
-        // ~305px sidebar, so a 1024px viewport leaves only ~720px of content:
-        // a FIXED 400px answer column left ~300px for three side-by-side
-        // inputs — about 100px each — and crushed the page's hero at its first
-        // paint on an ordinary laptop. At `xl` the content is ~975px, and the
-        // answer column is now a RANGE (320-420px) so it yields instead of
-        // starving the controls. If the sidebar width ever changes, re-check
-        // this breakpoint: the constraint is content width, not viewport width.
+        // The original `lg:grid-cols-[minmax(0,1fr)_400px]` crushed the three
+        // inputs to ~76px at a 1024px viewport. Moving the split to `xl` with a
+        // flexible answer column helped but did not fix it: `PageLayout` caps
+        // this column at `max-w-5xl` (1024px), so extra screen width NEVER
+        // reaches the hero, and the inputs actually got NARROWER at the
+        // breakpoint meant to improve them — 301px at 1279px, 154px at 1280px.
+        //
+        // A viewport-keyed split is the wrong tool here: the real constraint is
+        // CONTENT width, and the sidebar (SIDEBAR_DEFAULT_WIDTH 256, user
+        // resizable 200-400) sits between the two. Stacking removes the
+        // breakpoint, removes that maintenance trap, and gives the inputs
+        // 216-317px and the answer the full column at every size.
         variant === 'bare' && className,
       )}
     >

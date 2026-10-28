@@ -558,12 +558,16 @@ export default function ApprovalPolicyEditPage() {
               showRegionPill={false}
             />
 
-            {/* D-Q2 — retired criteria, read-only.
-                A lease request never carries a region or a lease type, so a
-                rule filtered on either can never match anything. The values
-                are NOT deleted behind the admin's back: they are shown, the
-                consequence is stated in plain language, and removing them is
-                one click. */}
+            {/* D-Q2 / #209 — retired criteria, read-only.
+                CORRECTED: a lease request never carries a LEASE TYPE, so a rule
+                filtered on one really can never match. REGION is different —
+                intake doesn't collect it, but LeaseReview.tsx:730 writes
+                `leases.region` and region triggers a reroute, so a region rule
+                can apply LATER, just never at submission. Do not restore the
+                old "can never match anything" wording.
+                The values are NOT deleted behind the admin's back: they are
+                shown, and clearing them is a STAGED edit that widens what the
+                rule routes — it only persists on Save. */}
             {retired.usesRetiredCriteria && (
               <div className="rounded-md border border-amber-400/60 dark:border-amber-500/50 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2.5 space-y-2">
                 <div className="flex items-start gap-1.5">

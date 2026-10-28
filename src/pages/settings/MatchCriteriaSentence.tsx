@@ -82,7 +82,7 @@ export function joinWithOr(values: string[]): string {
  *  `includeLeaseTypes` is false wherever `match_lease_types` has been retired
  *  from authoring (D-Q2): intake never collects a lease type, so an authored
  *  value can only ever kill the rule. Those values are shown — read-only, with
- *  the reason and a one-click removal — outside this sentence, so folding them
+ *  the reason, read-only (#209: no one-click removal — clearing a filter widens routing) — outside this sentence, so folding them
  *  into the pill here would both double-report them and imply they still
  *  narrow anything. */
 export function leaseTypeLabel(

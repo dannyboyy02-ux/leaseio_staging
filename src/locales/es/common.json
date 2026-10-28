@@ -3983,7 +3983,10 @@
       "paused_badge": "En pausa",
       "paused_explainer": "En pausa: las solicitudes como esta pasan a la siguiente regla que encaje.",
       "turn_on": "Activar",
-      "everything_else_unreviewed_warning": "No hay un aprobador de gerencia asignado, así que una solicitud por debajo de {{amount}} que no coincida con ninguna regla no tiene a nadie obligado a revisarla. Esas solicitudes se rechazan al enviarlas en lugar de aprobarse: asigne un aprobador de gerencia o agregue una regla que las cubra."
+      "everything_else_unreviewed_warning": "No hay un aprobador de gerencia asignado, así que una solicitud con un compromiso total por debajo de {{amount}} que no coincida con ninguna regla no tiene a nadie obligado a revisarla. Esas solicitudes no se pueden enviar: asigne un aprobador de gerencia o agregue una regla que las cubra.",
+      "everything_else_autoapprove_warning": "No hay un aprobador de gerencia asignado y no hay reglas activas, así que una solicitud con un compromiso total por debajo de {{amount}} se APRUEBA AUTOMÁTICAMENTE: nadie la revisa. Agregue una regla o asigne un aprobador de gerencia.",
+      "not_at_submission_badge": "No al enviar",
+      "not_at_submission_aria": "Esta regla no se aplicará al enviar una solicitud, solo si la región se completa más tarde"
     },
     "sentence": {
       "when_someone_requests": "Cuando alguien solicita",
@@ -4081,9 +4084,9 @@
       "overlap_pair": "«{{a}}» y «{{b}}» pueden aplicarse a la misma solicitud: gana la que está más arriba.",
       "shadowed_warning": "Nunca se usa: «{{name}}», que está más arriba, ya cubre todo lo que cubre esta regla.",
       "impossible_range_warning": "El importe mínimo de esta regla es mayor que el máximo, así que ninguna solicitud puede coincidir con ella.",
-      "retired_region_warning": "Esta regla solo se aplica a solicitudes con una región, y las solicitudes de arrendamiento no la piden, así que nunca se usará.",
-      "retired_lease_type_warning": "Esta regla solo se aplica a solicitudes con un tipo de arrendamiento, y las solicitudes de arrendamiento no lo piden, así que nunca se usará.",
-      "retired_both_warning": "Esta regla solo se aplica a solicitudes con una región y un tipo de arrendamiento, y las solicitudes de arrendamiento no piden ninguno de los dos, así que nunca se usará."
+      "retired_region_warning": "Las solicitudes de arrendamiento no incluyen una región al enviarse, así que esta regla no se aplicará entonces. Puede aplicarse más tarde, solo si alguien completa la región en el arrendamiento.",
+      "retired_lease_type_warning": "Esta regla solo encaja con solicitudes que tengan un tipo de arrendamiento, y las solicitudes nunca lo llevan, así que nunca se usará.",
+      "retired_both_warning": "Esta regla necesita un tipo de arrendamiento, que las solicitudes nunca llevan, así que nunca se usará. Su filtro de región tampoco se aplicaría al enviarse."
     },
     "order": {
       "heading": "Cómo se enrutan las solicitudes",
@@ -4107,10 +4110,11 @@
     "retired": {
       "region_label": "Región",
       "lease_type_label": "Tipo de arrendamiento",
-      "readonly_hint": "Las solicitudes de arrendamiento no incluyen este dato al enviarse, así que esta regla no coincidirá en ese momento. Borrarlo aquí hace que la regla abarque MÁS solicitudes: revise qué enruta antes de guardar.",
+      "readonly_hint": "Si lo borra, la regla se aplicará a solicitudes de todas las regiones: abarcará MÁS solicitudes, no menos. Revise qué enruta antes de guardar.",
       "remove_region": "Quitar el filtro de región",
       "remove_lease_type": "Quitar el filtro de tipo de arrendamiento",
-      "remove_both": "Quitar ambos filtros"
+      "remove_both": "Quitar ambos filtros",
+      "readonly_hint_row": "Abra esta regla para cambiar o borrar este filtro."
     },
     "hero": {
       "eyebrow": "Tal como están hoy las cosas",

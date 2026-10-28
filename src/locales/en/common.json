@@ -3983,7 +3983,10 @@
       "everything_else_no_signing": "No signing step — leases routed here skip \"sign the deal\".",
       "everything_else_auto_title": "Nobody is reviewing lease requests",
       "page_teaching": "Describe a lease below and see exactly who has to sign off on it. The rules underneath are the explanation for that answer.",
-      "everything_else_unreviewed_warning": "No manager approver is set, so a request under {{amount}} that matches no rule has nobody required to review it. Those requests are refused at submission rather than approved — assign a manager approver, or add a rule that covers them."
+      "everything_else_unreviewed_warning": "No manager approver is set, so a request with a total commitment under {{amount}} that matches no rule has nobody required to review it. Those requests can't be submitted — assign a manager approver, or add a rule that covers them.",
+      "everything_else_autoapprove_warning": "No manager approver is set and there are no active rules, so a request with a total commitment under {{amount}} is APPROVED AUTOMATICALLY — nobody reviews it. Add a rule, or assign a manager approver.",
+      "not_at_submission_badge": "Not at submission",
+      "not_at_submission_aria": "This rule won't apply when a request is submitted, only if the region is filled in later"
     },
     "sentence": {
       "when_someone_requests": "When someone requests",
@@ -4081,9 +4084,9 @@
       "overlap_pair": "«{{a}}» and «{{b}}» can both fit the same request — the higher one wins.",
       "shadowed_warning": "Never used — «{{name}}» above already covers everything this rule covers.",
       "impossible_range_warning": "The lowest amount in this rule is higher than the highest, so no request can match it.",
-      "retired_region_warning": "This rule only fits requests with a region, and lease requests don't ask for one — so it will never be used.",
-      "retired_lease_type_warning": "This rule only fits requests with a lease type, and lease requests don't ask for one — so it will never be used.",
-      "retired_both_warning": "This rule only fits requests with a region and a lease type, and lease requests ask for neither — so it will never be used."
+      "retired_region_warning": "Lease requests don't include a region when they're submitted, so this rule won't apply then. It can apply later, only if someone fills in the region on the lease.",
+      "retired_lease_type_warning": "This rule only fits requests with a lease type, and lease requests never carry one — so it will never be used.",
+      "retired_both_warning": "This rule needs a lease type, which lease requests never carry — so it will never be used. Its region filter also wouldn't apply at submission."
     },
     "order": {
       "heading": "How requests are routed",
@@ -4107,10 +4110,11 @@
     "retired": {
       "region_label": "Region",
       "lease_type_label": "Lease type",
-      "readonly_hint": "Lease requests don't include this when they're submitted, so this rule won't match there. Clearing it here makes the rule fit MORE requests — review what it routes before you save.",
+      "readonly_hint": "If you clear this, the rule will apply to requests from every region — it will fit MORE requests, not fewer. Check what it routes before you save.",
       "remove_region": "Remove the region filter",
       "remove_lease_type": "Remove the lease type filter",
-      "remove_both": "Remove both filters"
+      "remove_both": "Remove both filters",
+      "readonly_hint_row": "Open this rule to change or clear this filter."
     },
     "hero": {
       "eyebrow": "As things stand today",

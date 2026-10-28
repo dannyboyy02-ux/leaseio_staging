@@ -123,6 +123,20 @@ export function ApprovalEverythingElseRow({
   const thresholdAmount =
     approvalThreshold == null ? null : formatLocalizedCurrency(approvalThreshold, language);
 
+  // `workspaces.approval_threshold` DEFAULTS TO 0 (baseline_schema:1888), and a
+  // threshold of 0 means `totalCashCommitment >= 0` — ALWAYS true — so financial
+  // review is always REQUIRED and nothing falls through unreviewed. Treating 0
+  // as a real threshold printed "a request under $0.00 has nobody required to
+  // review it" on a default workspace, which is both nonsense and false.
+  const thresholdApplies = approvalThreshold != null && approvalThreshold > 0;
+
+  // The precondition for BOTH warnings below: a financial approver is assigned,
+  // no manager approver is, and a real threshold exists — so a request under it
+  // has nobody REQUIRED to look. What happens next depends on whether any ACTIVE
+  // rule exists, which is the only thing that separates "refused" from
+  // "auto-approved". Assigning an approver is not proof of review.
+  const noRequiredReviewer = financialFilled && !managerFilled && thresholdApplies;
+
   return (
     <RowShell
       id={id}
@@ -179,7 +193,7 @@ export function ApprovalEverythingElseRow({
             </RowNote>
           )}
 
-          {financialFilled && thresholdAmount && (
+          {financialFilled && thresholdApplies && (
             <RowNote icon={Info} tone="muted">
               {t('workflow.request.review_threshold', { amount: thresholdAmount })}
             </RowNote>
@@ -191,9 +205,23 @@ export function ApprovalEverythingElseRow({
               request under it has nobody required to look. The engine refuses
               those at submission rather than approving them — say so here, or
               an admin reads "financial approver assigned" as "covered". */}
-          {financialFilled && !managerFilled && thresholdAmount && (
+          {noRequiredReviewer && hasAnyRules && (
             <RowNote icon={AlertTriangle} tone="caution">
               {t('policy_editor.list.everything_else_unreviewed_warning', {
+                amount: thresholdAmount,
+              })}
+            </RowNote>
+          )}
+
+          {/* The INVERSE of the line above, and it must never be confused with
+              it. With no ACTIVE rule there is no `no_match_no_fallback`, so
+              #207 never fires and the engine takes the legacy path — which,
+              with nobody required, AUTO-APPROVES. Saying "refused" here would
+              be the #208 error in reverse: telling an admin the gate is shut
+              while it stands open. */}
+          {noRequiredReviewer && !hasAnyRules && (
+            <RowNote icon={AlertTriangle} tone="caution">
+              {t('policy_editor.list.everything_else_autoapprove_warning', {
                 amount: thresholdAmount,
               })}
             </RowNote>

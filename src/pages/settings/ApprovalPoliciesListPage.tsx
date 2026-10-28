@@ -42,7 +42,6 @@ import {
   describeOverlapStatus,
   findShadowedRules,
   type DescribableStep,
-  type RetiredDimension,
 } from '@/lib/approvalDescribe';
 import { engineOrder } from '@/lib/approvalPolicyOrder';
 import type { HeroSeedRule } from '@/lib/approvalHeroSeed';
@@ -257,10 +256,6 @@ export default function ApprovalPoliciesListPage() {
     reload();
   };
 
-  /** D-Q2: strip ONLY the dead dimensions. Nothing else about the rule
-   *  changes, and the values are not preserved anywhere else — the warning has
-   *  already shown them read-only, which is the disclosure D-Q2 requires. */
-
   /** D-Q4: only ever reached once the dialog's evidence check has confirmed
    *  this rule never routed a request. */
   const hardDelete = async (rule: DeletableRule) => {
@@ -312,22 +307,13 @@ export default function ApprovalPoliciesListPage() {
           <ChevronLeft className="h-4 w-4 mr-1" />
           {t('workspace.back_to_workspace_settings')}
         </Button>
-        {/* 1 — PAGE HEADER. The measured 672px failure was a `flex-row` with no
-            wrap, no `min-w-0` on the text, and `shrink-0` on the buttons: the
-            description collapsed to 67px and the primary action clipped off
-            screen. Below `sm` the primary action now owns a full-width line, so
-            it cannot be pushed out of the viewport rather than being patched to
-            fit at one width. */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <p className="min-w-0 text-sm text-muted-foreground">
-            {/* PENDING KEY: policy_editor.list.page_teaching */}
-            {t('policy_editor.list.page_teaching', {
-              defaultValue:
-                'Describe a lease below and see exactly who has to sign off on it. The rules underneath are the explanation for that answer.',
-            })}
-          </p>
-
-        </div>
+        {/* 1 — THE TEACHING LINE. The primary action moved to AppHeader's
+            `actions` slot (#211), so this is a single paragraph now — the
+            flex row it used to share with a button is gone, not left behind
+            as a one-child wrapper. */}
+        <p className="min-w-0 text-sm text-muted-foreground">
+          {t('policy_editor.list.page_teaching')}
+        </p>
 
         {/* 2 — THE HERO. Permanent, seeded from this workspace's own leases, and
             answering before anything is touched. `onOpenRule` is the one-click
@@ -342,12 +328,9 @@ export default function ApprovalPoliciesListPage() {
 
         {/* 3 — HOW REQUESTS ARE ROUTED. */}
         <Card>
-          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1.5">
-              <CardTitle>{t('policy_editor.order.heading')}</CardTitle>
-              <CardDescription>{t('policy_editor.order.help')}</CardDescription>
-            </div>
-
+          <CardHeader className="space-y-1.5">
+            <CardTitle>{t('policy_editor.order.heading')}</CardTitle>
+            <CardDescription>{t('policy_editor.order.help')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {/* 3a — ONE overlap status line. When no two checked rules can

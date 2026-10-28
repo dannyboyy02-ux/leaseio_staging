@@ -20,7 +20,6 @@ import { Button } from '@/components/ui/button';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
 import type {
   RetiredCriteriaReport,
-  RetiredDimension,
   RuleOverlapInfo,
 } from '@/lib/approvalDescribe';
 import { RowNote } from '@/components/settings/ApprovalRowPrimitives';
@@ -70,7 +69,6 @@ export function RuleNeverFiresNote({
 export interface RetiredCriteriaBlockProps {
   /** `describeRetiredCriteria(policy)`. */
   report: RetiredCriteriaReport;
-  disabled?: boolean;
 }
 
 /**
@@ -81,7 +79,7 @@ export interface RetiredCriteriaBlockProps {
  * never a one-click action. The criteria stay visible and read-only; an admin
  * who wants them gone edits the rule deliberately.
  */
-export function RetiredCriteriaBlock({ report, disabled }: RetiredCriteriaBlockProps) {
+export function RetiredCriteriaBlock({ report }: RetiredCriteriaBlockProps) {
   const { t } = useAppTranslation();
   if (report.regions.length === 0 && report.leaseTypes.length === 0) return null;
 
@@ -109,7 +107,7 @@ export function RetiredCriteriaBlock({ report, disabled }: RetiredCriteriaBlockP
         )}
       </div>
       <RowNote icon={Info} tone="muted">
-        {t('policy_editor.retired.readonly_hint')}
+        {t('policy_editor.retired.readonly_hint_row')}
       </RowNote>
     </div>
   );

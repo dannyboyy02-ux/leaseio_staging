@@ -50,7 +50,12 @@ export function ApprovalAnswerInputs({
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      {/* #210 — `lg`, not `sm`. These columns are keyed to the VIEWPORT but the
+          available width is the viewport MINUS the 256px sidebar, which appears
+          at 768px. At `sm:grid-cols-3` the three inputs were 130px each at
+          768px — the tablet/small-laptop case. At `lg` they stack until the
+          content column can actually hold three (216px each at 1024px). */}
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor={ids.asset} className="text-xs">
             {t('policy_editor.hero.label_asset', { defaultValue: 'Kind of lease' })}
