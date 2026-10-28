@@ -38,7 +38,7 @@ into `docs/KNOWN_ISSUES.md` and keep going.
 
 ---
 
-## STEP 0 — Protect the work  ·  STATUS: NOT STARTED
+## STEP 0 — Protect the work  ·  STATUS: ✅ DONE 2026-10-27
 **Why first:** ~10,500 uncommitted lines have sat on one machine since 2026-08-14. A single bad
 command or dead disk erases months. No decision required.
 **Do:** commit the `approval-simplify` branch as-is (blocked and imperfect is fine — say so in the
@@ -107,5 +107,9 @@ plan. **Neither is required to sell this.** Do not start either while any step a
 ---
 
 ## Progress log (append one line per completed step; never rewrite history)
+- 2026-10-27 — STEP 0 DONE. Branch committed in two parts and pushed to origin
+  (`9cb4802` the blocked redesign, honestly labelled; `d7dbd70` the doc reconciliation +
+  this roadmap). Working tree clean, upstream = origin/approval-simplify, 0 ahead / 0 behind.
+  ~10,500 lines are no longer on a single disk. Nothing applied, nothing deployed, no PR.
 - 2026-10-27 — Roadmap created. Docs reconciled; `check:mirror-parity` was FAILING and is fixed;
   #193 resolved; #207–#212 filed. Baseline: typecheck clean, 2107 tests green.
