@@ -408,13 +408,17 @@ BEGIN
 END $$;
 
 -- ─────────────────────────────────────────────────────────────────────────
--- TEST 12 — resolve: ambiguous match (two policies tied at top priority)
---            should produce 0 chain rows when caller respects the error
+-- TEST 12 — resolve: priority TIE among co-matching policies (Move 1 / D1)
+--            The old "ambiguous → 409, 0 chain rows" contract is RETIRED. Ties
+--            are now broken deterministically (priority DESC, created_at ASC,
+--            id ASC — a total order, identical in the engine matchPolicy() and
+--            the preview RPC). A tie yields exactly ONE deterministic winner
+--            (the older rule), never an error.
 -- ─────────────────────────────────────────────────────────────────────────
 
 DO $$
 DECLARE
-  v_seed RECORD; v_p1 uuid; v_p2 uuid; v_ambiguous boolean := false; v_chain_count int;
+  v_seed RECORD; v_p1 uuid; v_p2 uuid; v_winner uuid; v_expected uuid; v_match_count int;
 BEGIN
   SELECT * INTO v_seed FROM public._test_phase2_seed();
   INSERT INTO public.approval_policies
@@ -426,24 +430,33 @@ BEGIN
   VALUES (v_seed.ws1, 'P2 tied B', 200, ARRAY['property'], true, v_seed.admin_user, v_seed.admin_user)
   RETURNING id INTO v_p2;
 
-  -- Simulate the edge function's tie detection: count active policies in
-  -- this workspace at the top priority that match.
-  PERFORM 1;
-  IF (
-    SELECT count(*) FROM public.approval_policies
-    WHERE workspace_id = v_seed.ws1 AND is_active AND priority = 200
-      AND 'property' = ANY(match_asset_types)
-  ) > 1 THEN
-    v_ambiguous := true;
-  END IF;
+  -- There IS a tie (both co-match at top priority) ...
+  SELECT count(*) INTO v_match_count
+  FROM public.approval_policies
+  WHERE workspace_id = v_seed.ws1 AND is_active AND priority = 200
+    AND 'property' = ANY(match_asset_types);
 
-  SELECT count(*) INTO v_chain_count
-  FROM public.lease_approval_chain WHERE lease_id = v_seed.lease_w1;
-  IF v_ambiguous AND v_chain_count = 0 THEN
-    RAISE NOTICE 'TEST 12 (resolve ambiguous match): PASS';
+  -- ... but resolution is now TOTAL and deterministic: the engine/RPC ORDER BY
+  -- picks exactly one winner. Reproduce that order here.
+  SELECT id INTO v_winner
+  FROM public.approval_policies
+  WHERE workspace_id = v_seed.ws1 AND is_active AND priority = 200
+    AND 'property' = ANY(match_asset_types)
+  ORDER BY priority DESC, created_at ASC, id ASC
+  LIMIT 1;
+
+  -- The older rule (min created_at, then min id) is the expected deterministic pick.
+  SELECT id INTO v_expected
+  FROM public.approval_policies
+  WHERE id IN (v_p1, v_p2)
+  ORDER BY created_at ASC, id ASC
+  LIMIT 1;
+
+  IF v_match_count = 2 AND v_winner = v_expected THEN
+    RAISE NOTICE 'TEST 12 (resolve tie → deterministic older-rule pick): PASS';
   ELSE
-    RAISE NOTICE 'TEST 12 (resolve ambiguous match): FAIL — ambiguous=% chain_count=%',
-      v_ambiguous, v_chain_count;
+    RAISE NOTICE 'TEST 12 (resolve tie → deterministic older-rule pick): FAIL — match_count=% winner=% expected=%',
+      v_match_count, v_winner, v_expected;
   END IF;
   PERFORM public._test_phase2_cleanup(v_seed);
 END $$;

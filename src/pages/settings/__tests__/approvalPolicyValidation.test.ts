@@ -114,14 +114,28 @@ describe('validatePolicy — chain shape (the spec\'s headline cases)', () => {
     expect(err).toBe('"First, get the green light" needs at least one approver.');
   });
 
-  it('blocks save with no signator step', () => {
+  // Move 2 (D2): stage 2 (signature) is OPTIONAL — a one-stage rule (concept
+  // steps only) is valid; the engine inherits the signature stage at runtime.
+  it('ALLOWS a one-stage rule (concept steps only, empty signator stage)', () => {
     const err = validatePolicy(
       baseForm(),
       [roleStep()],
       [],
       { workspaceSodDefault: true }
     );
-    expect(err).toBe('"Then, sign the deal" needs at least one approver.');
+    expect(err).toBeNull();
+  });
+
+  // But an opted-in signator slot with no approver still fails the per-step
+  // "pick an approver" check — an empty slot is a mistake, not an opt-out.
+  it('rejects an opted-in signator step with an empty slot', () => {
+    const err = validatePolicy(
+      baseForm(),
+      [roleStep()],
+      [{ ...roleStep(), approver_role: null }],
+      { workspaceSodDefault: true }
+    );
+    expect(err).toBe('"Then, sign the deal": pick an approver for every empty slot.');
   });
 
   it('rejects step with both user and role set', () => {

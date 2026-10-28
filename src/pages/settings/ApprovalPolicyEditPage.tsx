@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -6,7 +6,8 @@ import {
   Save,
   ArrowLeft,
   ChevronDown,
-  FlaskConical,
+  AlertTriangle,
+  Users,
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -28,10 +29,15 @@ import { useUnsavedChangesGuard } from '@/hooks/useUnsavedChangesGuard';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { validatePolicy } from './approvalPolicyValidation';
-import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 import { MatchCriteriaSentence } from './MatchCriteriaSentence';
 import { ChainDiagram, seedSingleEmptyStep, type ChainStep } from './ChainDiagram';
 import { buildAssetTypeOptions } from '@/lib/assetTypes';
+import {
+  buildRoleHolderMap,
+  describeChain,
+  describeRetiredCriteria,
+  joinAnd,
+} from '@/lib/approvalDescribe';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — FUNCTIONAL_ROLE_OPTIONS now lives in ChainDiagram (its only
@@ -44,12 +50,27 @@ import { buildAssetTypeOptions } from '@/lib/assetTypes';
 
 type SodMode = 'inherit' | 'allow' | 'require';
 
+/**
+ * NOTE ON `priority` AND `is_default_fallback` — both are absent on purpose.
+ *
+ * `priority` is written by exactly ONE path: the `set_approval_policy_order`
+ * RPC, driven from the rules list ("check this rule earlier / later"). This
+ * form used to send `priority` in its save payload too, which made the editor
+ * a second, unsanctioned writer of a column whose whole correctness argument
+ * is that a single transaction owns the workspace's total order. Two writers =
+ * two admins can interleave into an order neither chose. Order is not a
+ * property of a rule; it is a property of the SET, so it is not in this form.
+ *
+ * `is_default_fallback` was retired as a routing mechanism (D-Q1, migration
+ * 20260719120100). The column is inert — the engine no longer consults it —
+ * so a switch labelled "use this rule when no other rule fits" would promise
+ * behaviour that cannot happen. The column is left in the database (authored
+ * data is not destroyed); it is simply no longer an editable control.
+ */
 interface PolicyForm {
   name: string;
   description: string;
-  priority: number;
   is_active: boolean;
-  is_default_fallback: boolean;
   match_asset_types: string[];
   match_lease_types: string[];
   match_departments: string[];
@@ -64,9 +85,7 @@ interface PolicyForm {
 const emptyForm = (): PolicyForm => ({
   name: '',
   description: '',
-  priority: 100,
   is_active: true,
-  is_default_fallback: false,
   match_asset_types: [],
   match_lease_types: [],
   match_departments: [],
@@ -85,7 +104,7 @@ const newUiId = () => `s-${Date.now()}-${Math.random().toString(36).slice(2, 7)}
 
 export default function ApprovalPolicyEditPage() {
   const { workspace } = useApp();
-  const { t } = useAppTranslation();
+  const { t, language } = useAppTranslation();
   const { id: routeId } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const isNew = !routeId || routeId === 'new';
@@ -97,12 +116,15 @@ export default function ApprovalPolicyEditPage() {
   const [conceptSteps, setConceptSteps] = useState<ChainStep[]>(() =>
     isNew ? seedSingleEmptyStep() : [],
   );
-  const [signatorSteps, setSignatorSteps] = useState<ChainStep[]>(() =>
-    isNew ? seedSingleEmptyStep() : [],
-  );
+  // Stage 2 seeds EMPTY, not with a slot. The engine inherits the stage-1
+  // approvers when no signature step is authored (materializeSignatorInheritance),
+  // and validation requires only stage 1 — so seeding a dashed slot here made
+  // an optional stage read as mandatory and hid the inheritance entirely.
+  // The savedSnapshot baseline below seeds identically, or every new rule
+  // would open dirty.
+  const [signatorSteps, setSignatorSteps] = useState<ChainStep[]>([]);
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
-  const [testOpen, setTestOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   // Baseline for the dirty comparison (#174/#169 + #177b). New rule: the
@@ -111,16 +133,12 @@ export default function ApprovalPolicyEditPage() {
   // after load. serializePolicy is a hoisted function declaration (bottom
   // of file), so the lazy initializer may call it.
   const [savedSnapshot, setSavedSnapshot] = useState<string | null>(() =>
-    isNew ? serializePolicy(emptyForm(), seedSingleEmptyStep(), seedSingleEmptyStep()) : null,
+    isNew ? serializePolicy(emptyForm(), seedSingleEmptyStep(), []) : null,
   );
   const draftSerialized = serializePolicy(form, conceptSteps, signatorSteps);
   // Nothing is dirty before an edit-mode load completes (savedSnapshot null).
   const isDirty = savedSnapshot !== null && draftSerialized !== savedSnapshot;
   const { bypass } = useUnsavedChangesGuard(isDirty);
-  // #177b — preview_policy_resolution resolves against SAVED policy rows
-  // only; gate the sample tester while the draft differs from the last-saved
-  // snapshot (always for a brand-new rule — the RPC can never see a draft).
-  const testerStale = isNew || savedSnapshot === null || draftSerialized !== savedSnapshot;
 
   // Workspace-curated suggestion lists for departments/regions, plus the
   // workspace's separation-of-duties default so we can label the Inherit option.
@@ -163,10 +181,65 @@ export default function ApprovalPolicyEditPage() {
     },
   });
 
+  // Who actually holds each functional role. This is what turns "Anyone with
+  // role" into a person's name everywhere on this page — the chain chips and
+  // the answer strip both resolve through it. A role NOBODY holds is the most
+  // consequential thing this page can tell an admin (the request silently
+  // stops), so the map is loaded here rather than left undefined.
+  const roleHolders = useQuery({
+    queryKey: ['ws-role-holders-for-policy-editor', workspace?.id],
+    enabled: !!workspace?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('workspace_roles')
+        .select('user_id, role')
+        .eq('workspace_id', workspace!.id);
+      return buildRoleHolderMap((data ?? []) as Array<{ role: string; user_id: string }>);
+    },
+  });
+
   // Asset-type options for the rule builder + sample-request tester: the four
   // built-ins plus any workspace-configured Asset Type (Lease Configuration).
   // Falls back to built-ins until the workspace row loads.
   const assetTypeOptions = buildAssetTypeOptions(wsExtras.data?.assetTypes);
+
+  const memberOptions = members.data ?? [];
+  const roleHolderMap = roleHolders.data;
+
+  // THE LIVE ANSWER. Computed from the DRAFT, so "what does this rule do?" is
+  // answerable before saving — which is what retired the sample-tester modal
+  // and its save-first apology. describeChain is the same function the rules
+  // list and the hero use, so the four surfaces cannot word this differently.
+  // `language` is in the dep list because describeChain renders through the
+  // i18next singleton at call time (module contract).
+  const answer = useMemo(
+    () =>
+      describeChain(
+        [
+          ...conceptSteps.map((s) => ({ ...s, stage: 'concept' as const })),
+          ...signatorSteps.map((s) => ({ ...s, stage: 'signator' as const })),
+        ],
+        memberOptions,
+        roleHolderMap,
+      ),
+    [conceptSteps, signatorSteps, memberOptions, roleHolderMap, language],
+  );
+
+  // D-Q2: region / lease type are retired from authoring. Authored values are
+  // preserved and shown read-only with the reason + a one-click removal.
+  const retired = useMemo(
+    () =>
+      describeRetiredCriteria({
+        match_regions: form.match_regions,
+        match_lease_types: form.match_lease_types,
+      }),
+    [form.match_regions, form.match_lease_types, language],
+  );
+
+  // Stage 2 with no authored steps is the INHERITED state, not an empty one:
+  // the engine clones stage 1 into the signature stage at chain creation.
+  const signatureInherited = signatorSteps.length === 0;
+  const inheritedSignerNames = answer.stages.find((s) => s.stage === 'concept')?.names ?? [];
 
   // Load existing policy (and steps) for edit mode.
   useEffect(() => {
@@ -207,9 +280,7 @@ export default function ApprovalPolicyEditPage() {
         const loadedForm: PolicyForm = {
           name: (p as any).name,
           description: (p as any).description ?? '',
-          priority: (p as any).priority,
           is_active: (p as any).is_active,
-          is_default_fallback: (p as any).is_default_fallback,
           match_asset_types: (p as any).match_asset_types ?? [],
           match_lease_types: (p as any).match_lease_types ?? [],
           match_departments: (p as any).match_departments ?? [],
@@ -277,13 +348,16 @@ export default function ApprovalPolicyEditPage() {
       const sodOverride: boolean | null =
         form.sod_mode === 'inherit' ? null : form.sod_mode === 'require' ? true : false;
 
+      // `priority` is DELIBERATELY not in this payload — see the PolicyForm
+      // note. A new rule takes its position from the insert default; an
+      // existing rule keeps whatever the ordering RPC last set. Neither is
+      // this form's business. `is_default_fallback` is likewise omitted so
+      // the inert authored value is preserved rather than rewritten.
       const payload = {
         workspace_id: workspace.id,
         name: form.name.trim(),
         description: form.description.trim() || null,
-        priority: form.priority,
         is_active: form.is_active,
-        is_default_fallback: form.is_default_fallback,
         match_asset_types: form.match_asset_types,
         match_lease_types: form.match_lease_types,
         match_departments: form.match_departments,
@@ -369,6 +443,46 @@ export default function ApprovalPolicyEditPage() {
           </Button>
         </div>
 
+        {/* ── Live answer strip ──────────────────────────────────────────
+            Always visible, no card chrome. This is the page's whole point:
+            the admin can read what the rule DOES before saving it. It is
+            computed locally from draft state, so it is truthful for an
+            unsaved rule — which is exactly what the old modal tester could
+            never be (preview_policy_resolution only sees saved rows). */}
+        <div className="rounded-lg border bg-muted/30 px-4 py-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t('policy_editor.hero.heading')}
+          </p>
+          <p
+            className={
+              answer.blocked
+                ? 'mt-1 flex items-start gap-1.5 text-sm font-medium text-amber-800 dark:text-amber-200'
+                : 'mt-1 text-sm font-medium text-foreground'
+            }
+          >
+            {answer.blocked && (
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+            )}
+            <span>{answer.sentence}</span>
+          </p>
+          {/* Cautions that do NOT block outright (one dead step among several)
+              still get said — silence here is how an unfilled role becomes a
+              request that stalls with nobody noticing. */}
+          {!answer.blocked && answer.cautions.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {answer.cautions.map((c, i) => (
+                <li
+                  key={`${c.kind}-${c.role ?? i}`}
+                  className="flex items-start gap-1.5 text-xs text-amber-800 dark:text-amber-200"
+                >
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden />
+                  <span>{c.text}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
         {/* Name your rule */}
         <Card>
           <CardHeader>
@@ -425,7 +539,7 @@ export default function ApprovalPolicyEditPage() {
           <CardHeader>
             <CardTitle>{t('policy_editor.when_card_title')}</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-3">
             <MatchCriteriaSentence
               state={{
                 match_asset_types: form.match_asset_types,
@@ -439,7 +553,89 @@ export default function ApprovalPolicyEditPage() {
               departmentSuggestions={wsExtras.data?.departments ?? []}
               regionSuggestions={wsExtras.data?.regions ?? []}
               assetTypeOptions={assetTypeOptions}
+              allowLeaseTypeAuthoring={false}
+              showRegionPill={false}
             />
+
+            {/* D-Q2 — retired criteria, read-only.
+                A lease request never carries a region or a lease type, so a
+                rule filtered on either can never match anything. The values
+                are NOT deleted behind the admin's back: they are shown, the
+                consequence is stated in plain language, and removing them is
+                one click. */}
+            {retired.usesRetiredCriteria && (
+              <div className="rounded-md border border-amber-400/60 dark:border-amber-500/50 bg-amber-50/60 dark:bg-amber-950/20 px-3 py-2.5 space-y-2">
+                <div className="flex items-start gap-1.5">
+                  <AlertTriangle
+                    className="h-4 w-4 shrink-0 mt-0.5 text-amber-700 dark:text-amber-300"
+                    aria-hidden
+                  />
+                  <div className="min-w-0 space-y-1">
+                    <p className="text-xs font-medium text-amber-900 dark:text-amber-100">
+                      {retired.warning}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                      {retired.dimensions.includes('region') && (
+                        <span>
+                          <span className="font-medium">
+                            {t('policy_editor.retired.region_label')}:
+                          </span>{' '}
+                          {joinAnd(retired.regions)}
+                        </span>
+                      )}
+                      {retired.dimensions.includes('lease_type') && (
+                        <span>
+                          <span className="font-medium">
+                            {t('policy_editor.retired.lease_type_label')}:
+                          </span>{' '}
+                          {joinAnd(retired.leaseTypes)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {t('policy_editor.retired.readonly_hint')}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 pl-5">
+                  {retired.dimensions.includes('region') && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setForm({ ...form, match_regions: [] })}
+                    >
+                      {t('policy_editor.retired.remove_region')}
+                    </Button>
+                  )}
+                  {retired.dimensions.includes('lease_type') && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setForm({ ...form, match_lease_types: [] })}
+                    >
+                      {t('policy_editor.retired.remove_lease_type')}
+                    </Button>
+                  )}
+                  {retired.dimensions.length > 1 && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() =>
+                        setForm({ ...form, match_regions: [], match_lease_types: [] })
+                      }
+                    >
+                      {t('policy_editor.retired.remove_both')}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -458,7 +654,8 @@ export default function ApprovalPolicyEditPage() {
               }}
               steps={conceptSteps}
               setSteps={setConceptSteps}
-              memberOptions={members.data ?? []}
+              memberOptions={memberOptions}
+              roleHolders={roleHolderMap}
             />
 
             {/* Inter-stage connector — 24px vertical line, addendum §5 */}
@@ -466,6 +663,15 @@ export default function ApprovalPolicyEditPage() {
               <div className="w-px h-6 bg-border" aria-hidden />
             </div>
 
+            {/* Stage 2 is OPTIONAL and now says so.
+                The engine inherits the stage-1 approvers when no signature
+                step is authored, and validation requires only stage 1. This
+                stage therefore keeps its circled "2" and its caption — the
+                signing step genuinely happens — but its RESTING state is a
+                resolved statement ("the same people sign"), not a dashed
+                empty slot that reads mandatory. An inherited signer is never
+                rendered as though someone chose it: that difference is
+                exactly what an audit asks about. */}
             <ChainDiagram
               caption={{
                 badge: '2',
@@ -474,8 +680,36 @@ export default function ApprovalPolicyEditPage() {
               }}
               steps={signatorSteps}
               setSteps={setSignatorSteps}
-              memberOptions={members.data ?? []}
-            />
+              memberOptions={memberOptions}
+              roleHolders={roleHolderMap}
+            >
+              {signatureInherited ? (
+                <div className="rounded-lg border border-dashed bg-muted/20 px-3 py-3 space-y-2">
+                  <p className="text-sm flex items-start gap-2">
+                    <Users className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground" aria-hidden />
+                    <span>
+                      {inheritedSignerNames.length > 0
+                        ? t('policy_editor.describe.stage2_same_people', {
+                            names: joinAnd(inheritedSignerNames),
+                          })
+                        : t('policy_editor.describe.stage2_inherited_note')}
+                    </span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('policy_editor.stage2_optin_desc')}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => setSignatorSteps(seedSingleEmptyStep())}
+                  >
+                    {t('policy_editor.stage2_optin_add')}
+                  </Button>
+                </div>
+              ) : undefined}
+            </ChainDiagram>
           </CardContent>
         </Card>
 
@@ -497,17 +731,11 @@ export default function ApprovalPolicyEditPage() {
             </CollapsibleTrigger>
             <CollapsibleContent>
               <CardContent className="space-y-6 pt-2">
-                {/* When two rules fit, which wins? */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">{t('policy_editor.priority_label')}</Label>
-                  <Input
-                    type="number"
-                    value={form.priority}
-                    onChange={(e) => setForm({ ...form, priority: parseInt(e.target.value || '0', 10) })}
-                    min={1}
-                  />
-                  <p className="text-[10px] text-muted-foreground">{t('policy_editor.priority_help')}</p>
-                </div>
+                {/* The priority <Input> that used to sit here is gone: when
+                    two rules fit, the answer is "the one checked first", and
+                    that is set by moving rules on the rules list, not by
+                    typing an integer here. Its two locale keys
+                    (priority_label / priority_help) were deleted. */}
 
                 {/* Approval SLA — #111 C6 */}
                 <div className="space-y-1.5">
@@ -525,20 +753,11 @@ export default function ApprovalPolicyEditPage() {
                   </p>
                 </div>
 
-                {/* Use this rule when no other rule fits */}
-                <div className="space-y-1.5">
-                  <Label className="text-xs">{t('policy_editor.fallback_label')}</Label>
-                  <div className="flex items-center gap-2 h-10">
-                    <Switch
-                      checked={form.is_default_fallback}
-                      onCheckedChange={(v) => setForm({ ...form, is_default_fallback: v })}
-                    />
-                    <span className="text-xs text-muted-foreground">
-                      {form.is_default_fallback ? t('policy_editor.fallback_on') : t('policy_editor.fallback_off')}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">{t('policy_editor.fallback_help')}</p>
-                </div>
+                {/* The "use this rule when no other rule fits" switch is gone
+                    too: D-Q1 retired is_default_fallback as a routing
+                    mechanism (migration 20260719120100), so the engine no
+                    longer consults it. A control that cannot change routing
+                    does not belong on a governance surface. */}
 
                 {/* Can the same person fill multiple roles? */}
                 <div className="space-y-2">
@@ -574,21 +793,10 @@ export default function ApprovalPolicyEditPage() {
           </Collapsible>
         </Card>
 
-        {/* Test / Save / Cancel */}
-        <div className="flex flex-wrap items-center justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 pl-6 pr-20 border-t">
-          <Button
-            variant="outline"
-            onClick={() => setTestOpen(true)}
-            disabled={saving || !workspace?.id || testerStale}
-          >
-            <FlaskConical className="h-4 w-4 mr-1.5" />
-            {t('policy_editor.try_sample')}
-          </Button>
-          {testerStale && (
-            <p className="text-xs text-muted-foreground min-w-0 max-w-xs">
-              {t('policy_editor.tester_save_first')}
-            </p>
-          )}
+        {/* Save / Cancel. No test button: the answer strip at the top of the
+            page already says what this rule does, computed from the draft, so
+            there is nothing to save-then-test. */}
+        <div className="flex flex-wrap items-center justify-end gap-2 sticky bottom-0 bg-background/95 backdrop-blur py-4 -mx-6 px-6 border-t">
           <div className="flex-1" />
           <Button variant="ghost" onClick={() => navigate('/app/settings/approval-policies')} disabled={saving}>
             {t('common.cancel')}
@@ -608,13 +816,6 @@ export default function ApprovalPolicyEditPage() {
           </Button>
         </div>
       </div>
-
-      <ApprovalPolicyTestDialog
-        open={testOpen}
-        onOpenChange={setTestOpen}
-        workspaceId={workspace?.id ?? null}
-        assetTypeOptions={assetTypeOptions}
-      />
     </AppLayout>
   );
 }

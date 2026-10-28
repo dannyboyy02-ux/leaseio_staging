@@ -1,244 +1,294 @@
-import { useState, useMemo } from 'react';
-import { t as tGlobal } from 'i18next';
+// ─────────────────────────────────────────────────────────────────────────
+// "Who approves what" — the approval-rules list.
+//
+// THE THESIS: I describe a lease, the page names the people who must sign off
+// on it, and the rules underneath are the EXPLANATION for that answer. So the
+// answer strip is a permanent hero (never a modal, never a "Run" button), and
+// every rule row ends in the people rather than in metadata.
+//
+// This page composes; it does not implement. Matching comes from the same
+// `preview_policy_resolution` RPC the engine agrees with, approver prose comes
+// from `approvalDescribe` (which can never emit a raw UUID), and order is
+// written ONLY through `set_approval_policy_order`.
+//
+// GONE FROM THIS SCREEN (deliberately, all of it):
+//  • the `priority N` badge and every user-facing integer derived from it —
+//    position is expressed as position, and only when it decides something;
+//  • the ⭐ default-fallback badge — the flag is retired from the engine, and
+//    the permanent "Everything else" row is the real catch-all;
+//  • the sample-request MODAL (ApprovalPolicyTestDialog) — the hero answers
+//    continuously, so a dialog that answers on demand is strictly worse;
+//  • "No approval rules yet" — a workspace with zero rules is already routing
+//    every request somewhere, and this screen's first duty is to say where.
+// ─────────────────────────────────────────────────────────────────────────
+
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, FlaskConical, Edit3, Copy, Loader2, Star, ChevronLeft } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useApp } from '@/contexts/AppContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { ApprovalPolicyTestDialog } from '@/components/settings/ApprovalPolicyTestDialog';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
-import { useLanguage } from '@/contexts/LanguageContext';
-import { formatLocalizedDate, formatLocalizedCurrency, type SupportedLocale } from '@/lib/dateFormatters';
-import { localizedAssetTypeLabel } from '@/lib/assetTypeLabels';
+import { buildAssetTypeOptions } from '@/lib/assetTypes';
 import {
-  buildAssetTypeOptions,
-  canonicalAssetType,
-  prettyAssetType,
-  type AssetTypeOption,
-} from '@/lib/assetTypes';
+  describeOverlapStatus,
+  findShadowedRules,
+  type DescribableStep,
+  type RetiredDimension,
+} from '@/lib/approvalDescribe';
+import { engineOrder } from '@/lib/approvalPolicyOrder';
+import type { HeroSeedRule } from '@/lib/approvalHeroSeed';
+import { useApprovalAnswerContext } from '@/hooks/useApprovalAnswerContext';
+import { useApprovalRuleOrder } from '@/hooks/useApprovalRuleOrder';
+import { ApprovalAnswerStrip } from '@/components/settings/ApprovalAnswerStrip';
+import { ApprovalRuleRow } from '@/components/settings/ApprovalRuleRow';
+import { ApprovalEverythingElseRow } from '@/components/settings/ApprovalEverythingElseRow';
+import {
+  ApprovalRuleDeleteDialog,
+  type DeletableRule,
+} from '@/components/settings/ApprovalRuleDeleteDialog';
 
+/** Exactly the columns this screen reads. `priority` and `created_at` are read
+ *  but never SHOWN — they only reproduce the engine's total order. */
 type Policy = {
   id: string;
   name: string;
-  description: string | null;
+  is_active: boolean;
   priority: number;
+  created_at: string;
   match_asset_types: string[];
   match_departments: string[];
-  match_min_annual_cost: number | null;
-  match_max_annual_cost: number | null;
   match_regions: string[];
   match_lease_types: string[];
-  is_default_fallback: boolean;
-  is_active: boolean;
-  updated_at: string;
+  match_min_annual_cost: number | null;
+  match_max_annual_cost: number | null;
 };
 
-const fmtMoney = (n: number | null, language: SupportedLocale): string =>
-  n == null
-    ? '—'
-    : formatLocalizedCurrency(n, language);
+type StepRow = DescribableStep & { policy_id: string };
 
-/** Humanize a stored asset value to the same label the editor shows — the
- *  configured/built-in option label when it canonically matches, else Title
- *  Case (so raw 'property'/'real_estate' don't leak into the summary chip). */
-const assetLabel = (value: string, options: AssetTypeOption[]): string =>
-  (() => {
-    const found = options.find((o) => canonicalAssetType(o.value) === canonicalAssetType(value));
-    return found ? localizedAssetTypeLabel(found) : undefined;
-  })() ??
-  prettyAssetType(value);
+const POLICY_COLUMNS =
+  'id, name, is_active, priority, created_at, match_asset_types, match_departments, match_regions, match_lease_types, match_min_annual_cost, match_max_annual_cost';
 
-const matchSummary = (
-  p: Policy,
-  language: SupportedLocale,
-  assetTypeOptions: AssetTypeOption[],
-): { label: string; value: string }[] => {
-  const out: { label: string; value: string }[] = [];
-  if (p.match_asset_types.length) {
-    // Dedupe by canonical key so a legacy rule holding both 'real_estate' and
-    // 'property' collapses to a single "Property (Real Estate)" chip (they are
-    // one class) instead of a duplicated pair.
-    const seen = new Set<string>();
-    const labels: string[] = [];
-    for (const v of p.match_asset_types) {
-      const key = canonicalAssetType(v);
-      if (seen.has(key)) continue;
-      seen.add(key);
-      labels.push(assetLabel(v, assetTypeOptions));
-    }
-    out.push({ label: tGlobal('policy_editor.list.chip_asset'), value: labels.join(', ') });
-  }
-  if (p.match_lease_types.length) out.push({ label: tGlobal('policy_editor.list.chip_type'), value: p.match_lease_types.join(', ') });
-  if (p.match_departments.length) out.push({ label: tGlobal('policy_editor.list.chip_dept'), value: p.match_departments.join(', ') });
-  if (p.match_regions.length) out.push({ label: tGlobal('policy_editor.list.chip_region'), value: p.match_regions.join(', ') });
-  const min = p.match_min_annual_cost;
-  const max = p.match_max_annual_cost;
-  if (min != null || max != null) {
-    out.push({
-      label: tGlobal('policy_editor.list.chip_annual'),
-      value: `${min != null ? fmtMoney(min, language) : '—'} – ${max != null ? fmtMoney(max, language) : '—'}`,
-    });
-  }
-  return out;
-};
+/** Where a solo admin can actually name the default approvers. The
+ *  `members.length > 1` gate that used to hide this editor is fixed (D-Q3), so
+ *  this CTA can no longer dead-end for the user most likely to need it. */
+const APPROVAL_ROLES_HREF = '/app/settings/workspaces/users?highlight=approval-roles';
 
 export default function ApprovalPoliciesListPage() {
   const { workspace } = useApp();
+  const workspaceId = workspace?.id ?? null;
   const navigate = useNavigate();
   const { t } = useAppTranslation();
-  const { language } = useLanguage();
   const queryClient = useQueryClient();
-  const fmtDate = (iso: string): string =>
-    formatLocalizedDate(iso, language, { month: 'short', day: 'numeric', year: 'numeric' });
-  const [testOpen, setTestOpen] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<DeletableRule | null>(null);
 
+  // ── reads ─────────────────────────────────────────────────────────────
   const policiesQuery = useQuery<Policy[]>({
-    queryKey: ['approval-policies', workspace?.id],
-    enabled: !!workspace?.id,
+    queryKey: ['approval-policies', workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('approval_policies')
-        .select(
-          'id, name, description, priority, match_asset_types, match_departments, match_min_annual_cost, match_max_annual_cost, match_regions, match_lease_types, is_default_fallback, is_active, updated_at'
-        )
-        .eq('workspace_id', workspace!.id)
+        .select(POLICY_COLUMNS)
+        .eq('workspace_id', workspaceId!)
+        // The engine's EXACT total order. The `id` key is not cosmetic: without
+        // it, two rules sharing (priority, created_at) can render in an order
+        // the engine will not honour.
         .order('priority', { ascending: false })
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true });
       if (error) throw error;
-      return (data ?? []) as Policy[];
+      return (data ?? []) as unknown as Policy[];
     },
   });
 
-  const sodQuery = useQuery({
-    queryKey: ['workspace-sod-default', workspace?.id],
-    enabled: !!workspace?.id,
+  // Sorted client-side too, so the displayed order is provably the comparator
+  // the engine uses rather than whatever the server happened to return.
+  const policies = useMemo(() => engineOrder(policiesQuery.data ?? []), [policiesQuery.data]);
+  const policyIds = useMemo(() => policies.map((p) => p.id), [policies]);
+  const policyIdKey = policyIds.join(',');
+
+  const stepsQuery = useQuery<StepRow[]>({
+    queryKey: ['approval-policy-steps', workspaceId, policyIdKey],
+    enabled: !!workspaceId && policyIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('approval_chain_steps')
+        .select(
+          'policy_id, stage, step_order, parallel_group, approver_user_id, approver_role, delegate_user_id, delegate_after_days, is_required',
+        )
+        .in('policy_id', policyIds);
+      if (error) throw error;
+      return (data ?? []) as unknown as StepRow[];
+    },
+  });
+
+  const stepsByPolicy = useMemo(() => {
+    const map = new Map<string, DescribableStep[]>();
+    for (const step of stepsQuery.data ?? []) {
+      const list = map.get(step.policy_id);
+      if (list) list.push(step);
+      else map.set(step.policy_id, [step]);
+    }
+    return map;
+  }, [stepsQuery.data]);
+
+  const workspaceQuery = useQuery({
+    queryKey: ['workspace-approval-settings', workspaceId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('workspaces')
-        .select('separation_of_duties_default, asset_type_config')
-        .eq('id', workspace!.id)
+        .select('separation_of_duties_default, covenant_threshold')
+        .eq('id', workspaceId!)
         .maybeSingle();
       if (error) throw error;
       return {
         sodDefault: Boolean((data as any)?.separation_of_duties_default ?? true),
-        assetTypes: ((data as any)?.asset_type_config ?? []) as string[],
+        covenantThreshold: ((data as any)?.covenant_threshold ?? null) as number | null,
       };
     },
   });
 
-  const sortedPolicies = useMemo(() => policiesQuery.data ?? [], [policiesQuery.data]);
-
-  // Shared asset-type options (built-ins + workspace-configured Asset Types) so
-  // the list-card summaries AND the tester speak the same vocabulary as the
-  // editor. Falls back to built-ins until the workspace row loads.
-  const assetTypeOptions = useMemo(
-    () => buildAssetTypeOptions(sodQuery.data?.assetTypes),
-    [sodQuery.data?.assetTypes],
+  // The hero's rules, in the order it must see them. Handing them over means
+  // the strip does not pay for a second copy of a list this page already has.
+  const heroRules = useMemo<HeroSeedRule[]>(
+    () =>
+      policies.map((p) => ({
+        id: p.id,
+        is_active: p.is_active,
+        match_asset_types: p.match_asset_types,
+        match_departments: p.match_departments,
+        match_min_annual_cost: p.match_min_annual_cost,
+        match_max_annual_cost: p.match_max_annual_cost,
+      })),
+    [policies],
   );
 
+  // Members, role holders and the approval threshold. Same query keys as the
+  // strip's own call, so React Query serves both from one fetch.
+  const ctx = useApprovalAnswerContext(workspaceId, heroRules);
+  const assetTypeOptions = useMemo(
+    () => buildAssetTypeOptions(ctx.assetTypeConfig),
+    [ctx.assetTypeConfig],
+  );
+
+  // ── ordering ──────────────────────────────────────────────────────────
+  const overlap = useMemo(() => findShadowedRules(policies), [policies]);
+  const names = useMemo(
+    () => new Map(policies.map((p) => [p.id, p.name] as const)),
+    [policies],
+  );
+  const reload = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: ['approval-policies', workspaceId] });
+    void queryClient.invalidateQueries({ queryKey: ['approval-answer-rules', workspaceId] });
+  }, [queryClient, workspaceId]);
+  const focusRow = useCallback((id: string) => {
+    // Focus returns to the row that MOVED, not to the top of the list. The
+    // row's overlay link is addressable by its edit href, so no extra id
+    // plumbing is needed through the row component.
+    window.requestAnimationFrame(() => {
+      document
+        .querySelector<HTMLElement>(`a[href="/app/settings/approval-policies/${id}"]`)
+        ?.focus();
+    });
+  }, []);
+  const order = useApprovalRuleOrder({
+    workspaceId,
+    orderedIds: policyIds,
+    names,
+    onReload: reload,
+    onMoved: focusRow,
+  });
+
+  // ── writes ────────────────────────────────────────────────────────────
   const toggleSodDefault = async (next: boolean) => {
-    if (!workspace?.id) return;
+    if (!workspaceId) return;
     const { error } = await supabase
       .from('workspaces')
       .update({ separation_of_duties_default: next } as any)
-      .eq('id', workspace.id);
+      .eq('id', workspaceId);
     if (error) {
       toast.error(t('policy_editor.list.toast_sod_failed'));
       return;
     }
     queryClient.setQueryData(
-      ['workspace-sod-default', workspace.id],
-      (prev: { sodDefault: boolean; assetTypes: string[] } | undefined) => ({
+      ['workspace-approval-settings', workspaceId],
+      (prev: { sodDefault: boolean; covenantThreshold: number | null } | undefined) => ({
         sodDefault: next,
-        assetTypes: prev?.assetTypes ?? [],
+        covenantThreshold: prev?.covenantThreshold ?? null,
       }),
     );
-    toast.success(next ? t('policy_editor.list.toast_sod_on') : t('policy_editor.list.toast_sod_off'));
+    toast.success(
+      next ? t('policy_editor.list.toast_sod_on') : t('policy_editor.list.toast_sod_off'),
+    );
   };
 
-  const toggleActive = async (policy: Policy, next: boolean) => {
+  const setPaused = async (policy: Policy, nextActive: boolean) => {
     setBusyId(policy.id);
     const { error } = await supabase
       .from('approval_policies')
-      .update({ is_active: next } as any)
+      .update({ is_active: nextActive } as any)
       .eq('id', policy.id);
     setBusyId(null);
     if (error) {
-      // The partial unique index will reject if turning a non-default on while
-      // another default is also active — surface a helpful message.
       toast.error(error.message || t('policy_editor.list.toast_rule_update_failed'));
       return;
     }
-    queryClient.invalidateQueries({ queryKey: ['approval-policies', workspace?.id] });
+    if (!nextActive) toast.success(t('policy_editor.list.toast_turned_off'));
+    reload();
   };
 
-  const duplicate = async (policy: Policy) => {
-    if (!workspace?.id) return;
+  /** D-Q2: strip ONLY the dead dimensions. Nothing else about the rule
+   *  changes, and the values are not preserved anywhere else — the warning has
+   *  already shown them read-only, which is the disclosure D-Q2 requires. */
+  const removeRetiredCriteria = async (policy: Policy, dimensions: RetiredDimension[]) => {
     setBusyId(policy.id);
-    try {
-      const { data: userData } = await supabase.auth.getUser();
-      const userId = userData.user?.id;
-      if (!userId) throw new Error(t('policy_editor.toast_not_signed_in'));
-
-      const { data: newPolicy, error: insertErr } = await supabase
-        .from('approval_policies')
-        .insert({
-          workspace_id: workspace.id,
-          name: t('policy_editor.list.copy_name', { name: policy.name }),
-          description: policy.description,
-          priority: policy.priority,
-          match_asset_types: policy.match_asset_types,
-          match_departments: policy.match_departments,
-          match_min_annual_cost: policy.match_min_annual_cost,
-          match_max_annual_cost: policy.match_max_annual_cost,
-          match_regions: policy.match_regions,
-          match_lease_types: policy.match_lease_types,
-          is_default_fallback: false,
-          is_active: false,
-          created_by: userId,
-          updated_by: userId,
-        } as any)
-        .select('id')
-        .single();
-      if (insertErr) throw insertErr;
-
-      const { data: steps, error: stepsErr } = await supabase
-        .from('approval_chain_steps')
-        .select('stage, step_order, parallel_group, approver_user_id, approver_role, delegate_user_id, delegate_after_days, is_required')
-        .eq('policy_id', policy.id);
-      if (stepsErr) throw stepsErr;
-
-      if (steps && steps.length > 0) {
-        const { error: rpcErr } = await supabase.rpc('apply_policy_steps', {
-          p_policy_id: (newPolicy as any).id,
-          p_steps: steps as any,
-        });
-        if (rpcErr) throw rpcErr;
-      }
-
-      toast.success(t('policy_editor.list.toast_duplicated'));
-      queryClient.invalidateQueries({ queryKey: ['approval-policies', workspace.id] });
-      navigate(`/app/settings/approval-policies/${(newPolicy as any).id}`);
-    } catch (err: any) {
-      toast.error(err?.message || t('policy_editor.list.toast_duplicate_failed'));
-    } finally {
-      setBusyId(null);
+    const patch: Record<string, string[]> = {};
+    if (dimensions.includes('region')) patch.match_regions = [];
+    if (dimensions.includes('lease_type')) patch.match_lease_types = [];
+    const { error } = await supabase
+      .from('approval_policies')
+      .update(patch as any)
+      .eq('id', policy.id);
+    setBusyId(null);
+    if (error) {
+      toast.error(t('policy_editor.retired.toast_failed'));
+      return;
     }
+    toast.success(t('policy_editor.retired.toast_removed'));
+    reload();
+  };
+
+  /** D-Q4: only ever reached once the dialog's evidence check has confirmed
+   *  this rule never routed a request. */
+  const hardDelete = async (rule: DeletableRule) => {
+    const { error } = await supabase.from('approval_policies').delete().eq('id', rule.id);
+    if (error) {
+      toast.error(t('policy_editor.list.toast_delete_failed'));
+      return;
+    }
+    toast.success(t('policy_editor.list.toast_deleted'));
+    reload();
+  };
+
+  const turnOffInstead = async (rule: DeletableRule) => {
+    const target = policies.find((p) => p.id === rule.id);
+    if (target) await setPaused(target, false);
   };
 
   return (
     <AppLayout>
       <AppHeader title={t('workspace.rules.title')} />
-      <div className="container mx-auto p-6 space-y-6">
+      <div className="container mx-auto max-w-4xl p-6 space-y-6">
         {/* This page sits outside the Settings shell, so without an explicit
             back link the user who arrived from Settings → Approval Rules has
             no way back but the browser button. Mirrors the WorkspacesSection
@@ -252,46 +302,54 @@ export default function ApprovalPoliciesListPage() {
           <ChevronLeft className="h-4 w-4 mr-1" />
           {t('workspace.back_to_workspace_settings')}
         </Button>
-        {/* Workspace default for distinct approvers */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">{t('policy_editor.sod_label')}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {t('policy_editor.list.sod_toggle_desc')}
-                </p>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs text-muted-foreground">
-                  {sodQuery.data?.sodDefault ? t('policy_editor.list.sod_on') : t('policy_editor.list.sod_off')}
-                </span>
-                <Switch
-                  checked={Boolean(sodQuery.data?.sodDefault)}
-                  onCheckedChange={toggleSodDefault}
-                  disabled={sodQuery.isPending}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+        {/* 1 — PAGE HEADER. The measured 672px failure was a `flex-row` with no
+            wrap, no `min-w-0` on the text, and `shrink-0` on the buttons: the
+            description collapsed to 67px and the primary action clipped off
+            screen. Below `sm` the primary action now owns a full-width line, so
+            it cannot be pushed out of the viewport rather than being patched to
+            fit at one width. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <p className="min-w-0 text-sm text-muted-foreground">
+            {/* PENDING KEY: policy_editor.list.page_teaching */}
+            {t('policy_editor.list.page_teaching', {
+              defaultValue:
+                'Describe a lease below and see exactly who has to sign off on it. The rules underneath are the explanation for that answer.',
+            })}
+          </p>
+          <div className="w-full sm:w-auto sm:shrink-0">
+            <Button
+              className="w-full sm:w-auto"
+              onClick={() => navigate('/app/settings/approval-policies/new')}
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              {t('policy_editor.list.new_rule')}
+            </Button>
+          </div>
+        </div>
 
-        {/* Rules list */}
+        {/* 2 — THE HERO. Permanent, seeded from this workspace's own leases, and
+            answering before anything is touched. `onOpenRule` is the one-click
+            path from a wrong answer to the rule that produced it. */}
+        <ApprovalAnswerStrip
+          workspaceId={workspaceId}
+          rules={heroRules}
+          assetTypeOptions={assetTypeOptions}
+          onOpenRule={(ruleId) => navigate(`/app/settings/approval-policies/${ruleId}`)}
+          onPickDefaultApprovers={() => navigate(APPROVAL_ROLES_HREF)}
+        />
+
+        {/* 3 — HOW REQUESTS ARE ROUTED. */}
         <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-4">
-            <div>
-              <CardTitle>{t('policy_editor.list.rules_title')}</CardTitle>
-              <CardDescription>
-                {t('policy_editor.list.rules_desc')}
-              </CardDescription>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1.5">
+              <CardTitle>{t('policy_editor.order.heading')}</CardTitle>
+              <CardDescription>{t('policy_editor.order.help')}</CardDescription>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="outline" size="sm" onClick={() => setTestOpen(true)}>
-                <FlaskConical className="h-4 w-4 mr-1.5" />
-                {t('policy_editor.try_sample')}
-              </Button>
+            <div className="w-full sm:w-auto sm:shrink-0">
               <Button
                 size="sm"
+                variant="outline"
+                className="w-full sm:w-auto"
                 onClick={() => navigate('/app/settings/approval-policies/new')}
               >
                 <Plus className="h-4 w-4 mr-1.5" />
@@ -299,110 +357,151 @@ export default function ApprovalPoliciesListPage() {
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
-            {policiesQuery.isPending ? (
+          <CardContent className="space-y-3">
+            {/* 3a — ONE overlap status line. When no two checked rules can
+                co-match, ordering decides nothing and the ordinals below are
+                not rendered at all. */}
+            {!policiesQuery.isError && policies.length > 0 && (
+              <p className="text-xs text-muted-foreground break-words">
+                {describeOverlapStatus(overlap)}
+              </p>
+            )}
+
+            {/* A failed fetch used to render as "No approval rules yet" — on a
+                routing screen that is a dangerous lie. */}
+            {policiesQuery.isError ? (
+              <div className="rounded-md border border-destructive/50 bg-destructive/5 p-4 space-y-2">
+                <p className="flex items-start gap-1.5 text-sm font-medium text-destructive">
+                  <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" aria-hidden="true" />
+                  <span className="min-w-0">{t('policy_editor.list.load_error_title')}</span>
+                </p>
+                <p className="text-xs text-destructive/90">
+                  {t('policy_editor.list.load_error_body')}
+                </p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => void policiesQuery.refetch()}
+                >
+                  {t('policy_editor.list.retry')}
+                </Button>
+              </div>
+            ) : policiesQuery.isPending || !ctx.directoryReady ? (
               <div className="space-y-2">
                 {[1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-16 w-full" />
                 ))}
               </div>
-            ) : sortedPolicies.length === 0 ? (
-              <div className="text-center py-12 text-sm text-muted-foreground">
-                <p>{t('policy_editor.list.empty_title')}</p>
-                <p className="mt-1">
-                  {t('policy_editor.list.empty_hint_prefix')} <strong>{t('policy_editor.list.new_rule')}</strong> {t('policy_editor.list.empty_hint_suffix')}
-                </p>
-              </div>
             ) : (
-              <div className="space-y-2">
-                {sortedPolicies.map((p) => {
-                  const chips = matchSummary(p, language, assetTypeOptions);
-                  return (
-                    <div
+              <>
+                {/* 6 — There is no "empty". A workspace with zero rules is
+                    already routing every request somewhere, and this line says
+                    where before the Everything-else row shows the people. */}
+                {policies.length === 0 && (
+                  <p className="text-sm text-muted-foreground break-words">
+                    {t('policy_editor.list.empty_now_routing')}
+                  </p>
+                )}
+
+                <ul role="list" className="space-y-2">
+                  {policies.map((p, i) => (
+                    <ApprovalRuleRow
                       key={p.id}
-                      className={`rounded-md border p-3 ${p.is_active ? '' : 'opacity-60'}`}
-                    >
-                      <div className="flex items-start justify-between gap-3 flex-wrap">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-medium text-sm truncate">{p.name}</p>
-                            <Badge variant="outline" className="text-xs">
-                              {t('policy_editor.priority_badge', { n: p.priority })}
-                            </Badge>
-                            {p.is_default_fallback && (
-                              <Badge className="text-xs bg-amber-100 text-amber-800 hover:bg-amber-200 border-amber-300">
-                                <Star className="h-3 w-3 mr-1" />
-                                {t('policy_editor.list.default_fallback')}
-                              </Badge>
-                            )}
-                          </div>
-                          {p.description && (
-                            <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{p.description}</p>
-                          )}
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {chips.length === 0 ? (
-                              <span className="text-xs text-muted-foreground italic">{t('policy_editor.list.matches_all')}</span>
-                            ) : (
-                              chips.map((c) => (
-                                <Badge key={c.label} variant="secondary" className="text-[10px] font-normal">
-                                  <span className="font-semibold mr-1">{c.label}:</span>
-                                  {c.value}
-                                </Badge>
-                              ))
-                            )}
-                          </div>
-                          <p className="text-[10px] text-muted-foreground mt-2">
-                            {t('policy_editor.list.updated_on', { date: fmtDate(p.updated_at) })}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <div className="flex items-center gap-1.5">
-                            <Switch
-                              checked={p.is_active}
-                              onCheckedChange={(v) => toggleActive(p, v)}
-                              disabled={busyId === p.id}
-                            />
-                            <span className="text-xs text-muted-foreground">{p.is_active ? t('policy_editor.list.active') : t('policy_editor.list.inactive')}</span>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => navigate(`/app/settings/approval-policies/${p.id}`)}
-                            title={t('common.edit')}
-                          >
-                            <Edit3 className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => duplicate(p)}
-                            disabled={busyId === p.id}
-                            title={t('policy_editor.list.duplicate')}
-                          >
-                            {busyId === p.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                      policy={p}
+                      steps={stepsByPolicy.get(p.id) ?? []}
+                      members={ctx.members}
+                      roleHolders={ctx.roleHolders}
+                      overlap={overlap.byRuleId.get(p.id) ?? null}
+                      /* 4 — POSITION, NEVER A NUMBER: the ordinal is omitted
+                         entirely when no two checked rules can co-match. */
+                      ordinal={overlap.anyOverlap ? i + 1 : undefined}
+                      ordinalTotal={overlap.anyOverlap ? policies.length : undefined}
+                      assetTypeOptions={assetTypeOptions}
+                      editHref={`/app/settings/approval-policies/${p.id}`}
+                      canMoveUp={i > 0}
+                      canMoveDown={i < policies.length - 1}
+                      busy={order.busy || busyId === p.id}
+                      onMoveUp={() => order.move('up', p.id)}
+                      onMoveDown={() => order.move('down', p.id)}
+                      onMoveToTop={() => order.move('top', p.id)}
+                      onMoveToBottom={() => order.move('bottom', p.id)}
+                      onTogglePaused={(next) => void setPaused(p, next)}
+                      onDelete={() => setPendingDelete({ id: p.id, name: p.name })}
+                      onRemoveRetiredCriteria={(dims) => void removeRetiredCriteria(p, dims)}
+                      className="scroll-mt-24"
+                    />
+                  ))}
+
+                  {/* 3 — ALWAYS LAST, ALWAYS PRESENT. The whole list is gated
+                      on `directoryReady` above, so the role map is resolved by
+                      the time this renders — an empty map would tell an admin
+                      that nobody reviews lease requests when someone does. */}
+                  <ApprovalEverythingElseRow
+                    id="approval-everything-else"
+                    members={ctx.members}
+                    roleHolders={ctx.roleHolders}
+                    approvalThreshold={ctx.approvalThreshold}
+                    covenantThreshold={workspaceQuery.data?.covenantThreshold ?? null}
+                    hasAnyRules={policies.length > 0}
+                    wideGutter={overlap.anyOverlap}
+                    onPickApprovers={() => navigate(APPROVAL_ROLES_HREF)}
+                    className="scroll-mt-24"
+                  />
+
+                </ul>
+
+                {/* One announcement per settled reorder — the moved rule is
+                    named, and so is where it landed. */}
+                <div aria-live="polite" aria-atomic="true" className="sr-only">
+                  {order.announcement}
+                </div>
+                {order.busy && (
+                  <p className="text-xs text-muted-foreground">{t('policy_editor.order.saving')}</p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>
+
+        {/* 7 — SEPARATION OF DUTIES, DEMOTED. Advanced, rare, and off by
+            default: one muted line below the card rather than the first card on
+            the screen. It stays on THIS page because it constrains the rules on
+            this page. */}
+        <div className="flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm text-muted-foreground break-words">
+              {t('policy_editor.sod_label')}
+            </p>
+            <p className="text-xs text-muted-foreground/80 mt-0.5 break-words">
+              {t('policy_editor.list.sod_toggle_desc')}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 sm:shrink-0">
+            <span className="text-xs text-muted-foreground">
+              {workspaceQuery.data?.sodDefault
+                ? t('policy_editor.list.sod_on')
+                : t('policy_editor.list.sod_off')}
+            </span>
+            <Switch
+              checked={Boolean(workspaceQuery.data?.sodDefault)}
+              onCheckedChange={(v) => void toggleSodDefault(v)}
+              disabled={workspaceQuery.isPending}
+              aria-label={t('policy_editor.sod_label')}
+            />
+          </div>
+        </div>
       </div>
 
-      <ApprovalPolicyTestDialog
-        open={testOpen}
-        onOpenChange={setTestOpen}
-        workspaceId={workspace?.id ?? null}
-        assetTypeOptions={assetTypeOptions}
+      {/* 8 — D-Q4: the dialog asks the database whether this rule ever routed a
+          request before it offers to delete anything. */}
+      <ApprovalRuleDeleteDialog
+        rule={pendingDelete}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null);
+        }}
+        onConfirmDelete={hardDelete}
+        onTurnOff={turnOffInstead}
       />
     </AppLayout>
   );

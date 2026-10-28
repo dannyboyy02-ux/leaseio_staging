@@ -77,10 +77,18 @@ export function joinWithOr(values: string[]): string {
   });
 }
 
-/** "any lease type" when both arrays empty; otherwise asset+lease combined. */
+/** "any lease type" when both arrays empty; otherwise asset+lease combined.
+ *
+ *  `includeLeaseTypes` is false wherever `match_lease_types` has been retired
+ *  from authoring (D-Q2): intake never collects a lease type, so an authored
+ *  value can only ever kill the rule. Those values are shown — read-only, with
+ *  the reason and a one-click removal — outside this sentence, so folding them
+ *  into the pill here would both double-report them and imply they still
+ *  narrow anything. */
 export function leaseTypeLabel(
   state: MatchCriteriaState,
   options: AssetTypeOption[] = DEFAULT_ASSET_TYPE_OPTIONS,
+  includeLeaseTypes = true,
 ): string {
   // Resolve + dedupe asset values by CANONICAL key so the pill reads the same
   // built-in label ("Property (Real Estate)") that the checkbox below it and
@@ -100,7 +108,9 @@ export function leaseTypeLabel(
       })(),
     );
   }
-  const all = [...assetLabels, ...state.match_lease_types];
+  const all = includeLeaseTypes
+    ? [...assetLabels, ...state.match_lease_types]
+    : assetLabels;
   if (all.length === 0) return t('policy_editor.sentence.any_lease_type');
   return joinWithOr(all);
 }
@@ -152,6 +162,15 @@ interface Props {
   /** Workspace-resolved asset-type options (built-ins + configured Asset
    *  Types). Falls back to the built-ins when the caller doesn't pass them. */
   assetTypeOptions?: AssetTypeOption[];
+  /** D-Q2. false retires `match_lease_types` from AUTHORING: the checkbox
+   *  group disappears and existing values stop showing in the pill (they are
+   *  surfaced read-only, with the reason, by the caller). Existing values are
+   *  never destroyed here. */
+  allowLeaseTypeAuthoring?: boolean;
+  /** D-Q2. false drops the ", located in <region>" clause entirely — lease
+   *  requests never carry a region, so the filter can only ever prevent a
+   *  match. */
+  showRegionPill?: boolean;
 }
 
 export function MatchCriteriaSentence({
@@ -160,20 +179,35 @@ export function MatchCriteriaSentence({
   departmentSuggestions,
   regionSuggestions,
   assetTypeOptions = DEFAULT_ASSET_TYPE_OPTIONS,
+  allowLeaseTypeAuthoring = true,
+  showRegionPill = true,
 }: Props) {
   const { language, t: tr } = useLanguage();
   return (
     <p className="text-sm leading-8 text-foreground">
       {tr('policy_editor.sentence.when_someone_requests')}{' '}
       <CriterionPill
-        label={leaseTypeLabel(state, assetTypeOptions)}
-        active={isLeaseTypeActive(state)}
+        label={leaseTypeLabel(state, assetTypeOptions, allowLeaseTypeAuthoring)}
+        active={
+          allowLeaseTypeAuthoring
+            ? isLeaseTypeActive(state)
+            : state.match_asset_types.length > 0
+        }
         color="blue"
         onClear={() =>
-          onChange({ ...state, match_asset_types: [], match_lease_types: [] })
+          onChange(
+            allowLeaseTypeAuthoring
+              ? { ...state, match_asset_types: [], match_lease_types: [] }
+              : { ...state, match_asset_types: [] },
+          )
         }
       >
-        <LeaseTypeEditor state={state} onChange={onChange} assetTypeOptions={assetTypeOptions} />
+        <LeaseTypeEditor
+          state={state}
+          onChange={onChange}
+          assetTypeOptions={assetTypeOptions}
+          allowLeaseTypeAuthoring={allowLeaseTypeAuthoring}
+        />
       </CriterionPill>
       {' '}{tr('policy_editor.sentence.in_department')}{' '}
       <CriterionPill
@@ -205,21 +239,25 @@ export function MatchCriteriaSentence({
       >
         <CostRangeEditor state={state} onChange={onChange} />
       </CriterionPill>
-      {tr('policy_editor.sentence.located_in')}{' '}
-      <CriterionPill
-        label={regionLabel(state)}
-        active={isRegionActive(state)}
-        color="teal"
-        onClear={() => onChange({ ...state, match_regions: [] })}
-      >
-        <ChipEditor
-          values={state.match_regions}
-          onChange={(v) => onChange({ ...state, match_regions: v })}
-          suggestions={regionSuggestions}
-          placeholder={tr('policy_editor.sentence.add_region_placeholder')}
-          heading={tr('policy_editor.sentence.match_regions')}
-        />
-      </CriterionPill>
+      {showRegionPill && (
+        <>
+          {tr('policy_editor.sentence.located_in')}{' '}
+          <CriterionPill
+            label={regionLabel(state)}
+            active={isRegionActive(state)}
+            color="teal"
+            onClear={() => onChange({ ...state, match_regions: [] })}
+          >
+            <ChipEditor
+              values={state.match_regions}
+              onChange={(v) => onChange({ ...state, match_regions: v })}
+              suggestions={regionSuggestions}
+              placeholder={tr('policy_editor.sentence.add_region_placeholder')}
+              heading={tr('policy_editor.sentence.match_regions')}
+            />
+          </CriterionPill>
+        </>
+      )}
       {tr('policy_editor.sentence.sentence_end')}
     </p>
   );
@@ -292,10 +330,12 @@ function LeaseTypeEditor({
   state,
   onChange,
   assetTypeOptions,
+  allowLeaseTypeAuthoring,
 }: {
   state: MatchCriteriaState;
   onChange: (s: MatchCriteriaState) => void;
   assetTypeOptions: AssetTypeOption[];
+  allowLeaseTypeAuthoring: boolean;
 }) {
   const { t: tr } = useLanguage();
   // Compare/toggle by canonical key so a rule stored with a legacy or
@@ -334,6 +374,11 @@ function LeaseTypeEditor({
           </label>
         ))}
       </div>
+      {/* D-Q2: no way to ADD a lease-type filter. Intake never collects one,
+          so every rule authored against it is dead on arrival. Values that
+          already exist are shown read-only, with the reason and a removal,
+          outside this popover. */}
+      {allowLeaseTypeAuthoring && (
       <div className="space-y-1.5">
         <p className="text-xs font-medium">{tr('policy_editor.sentence.lease_types_heading')}</p>
         {LEASE_TYPE_OPTIONS.map((o) => (
@@ -349,6 +394,7 @@ function LeaseTypeEditor({
           </label>
         ))}
       </div>
+      )}
     </div>
   );
 }

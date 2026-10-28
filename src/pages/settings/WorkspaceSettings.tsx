@@ -808,8 +808,14 @@ export default function WorkspaceSettings({ activeSection }: WorkspaceSettingsPr
               />
 
 
-              {/* Approval Roles — only shown when multiple members exist */}
-              {members && members.length > 1 && (
+              {/* Approval Roles.
+                  D-Q3: this used to be gated on `members.length > 1`, which
+                  hid the default-approver editor from exactly the workspace
+                  that most needs it — a solo admin, who must be able to name
+                  themselves as the approver before inviting anyone. The gate
+                  made the safety net unconfigurable and the "no default
+                  approvers assigned" warning unactionable. */}
+              {members && (
                 <Card>
                   <SectionCardHeader
                     icon={Users}

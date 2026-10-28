@@ -88,6 +88,46 @@ export function checkSeparationOfDuties(
 }
 
 /**
+ * Move 2 (D2) — materialized signator inheritance.
+ *
+ * A policy MAY skip the signature stage. When a policy has ≥1 concept step and
+ * ZERO signator steps, the signature stage inherits the concept stage: this
+ * helper appends clones of every concept step re-tagged stage='signator'
+ * (preserving step_order / parallel_group / approver_user_id / approver_role /
+ * delegate_user_id / delegate_after_days / is_required) and returns
+ * inheritedSignator=true. Otherwise it is a no-op (steps returned unchanged).
+ *
+ * CONTRACT (load-bearing):
+ * (a) Callers MUST run checkSeparationOfDuties over the AUTHORED list BEFORE
+ *     calling this — that ordering is exactly how D2's "SoD auto-satisfied for
+ *     the inherited stage" is implemented. An inherited clone of a concept
+ *     approver would trip 'require' mode if the check ran post-expansion.
+ * (b) Generic <T> so a PolicyStepRow clone keeps delegate_user_id /
+ *     delegate_after_days / is_required (and any other columns) intact.
+ * (c) A zero-concept list is never expanded (unreachable via the editor, which
+ *     still requires ≥1 concept approver; guards a malformed API-authored
+ *     policy from getting a spurious signature stage).
+ *
+ * SYNC CONSTRAINT — this helper must stay byte-equivalent in behavior across
+ * the Node/Deno mirror pair (src/lib/approvalChainLogic.ts and
+ * supabase/functions/_shared/approval_chain.ts). Directional wording is
+ * deliberately avoided here: check-mirror-parity strips only the LEADING file
+ * header, so any in-body comment must be identical in both copies.
+ * Pinned by src/lib/__tests__/signatorInheritance.test.ts.
+ */
+export function materializeSignatorInheritance<T extends { stage: Stage }>(
+  steps: T[],
+): { steps: T[]; inheritedSignator: boolean } {
+  const hasSignator = steps.some((s) => s.stage === 'signator');
+  const concept = steps.filter((s) => s.stage === 'concept');
+  if (hasSignator || concept.length === 0) return { steps, inheritedSignator: false };
+  return {
+    steps: [...steps, ...concept.map((s) => ({ ...s, stage: 'signator' as Stage }))],
+    inheritedSignator: true,
+  };
+}
+
+/**
  * A stage is complete when every required step in that stage has
  * status='approved'. Optional steps don't block completion regardless of
  * their status (they can stay pending or be skipped).

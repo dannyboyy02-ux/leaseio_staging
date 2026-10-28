@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react';
+import { Fragment, useState, type ReactNode } from 'react';
 import { t } from 'i18next';
 import {
   DndContext,
@@ -26,6 +26,7 @@ import {
   MoreVertical,
   Users,
   UserCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -49,23 +50,40 @@ import {
 } from '@/components/ui/command';
 import { cn } from '@/lib/utils';
 import { useAppTranslation } from '@/hooks/useAppTranslation';
+import {
+  APPROVAL_ROLE_LABEL_KEYS,
+  describeApprover,
+  type RoleHolderMap,
+} from '@/lib/approvalDescribe';
 
 // ───────────────────────────────────────────────────────────────────────────
 // Constants — keep aligned with workspace_roles. `abbrev` is the 2-letter
 // avatar label per visual contract addendum §1.
+//
+// The role VOCABULARY (which roles exist + what each one is called) is owned
+// by src/lib/approvalDescribe.ts — APPROVAL_ROLE_LABEL_KEYS. This file used to
+// keep a second copy of it, which is exactly how the editor and the rest of
+// the product drifted apart. Only the avatar abbreviation, which is purely a
+// rendering concern of this diagram, lives here.
 // ───────────────────────────────────────────────────────────────────────────
+
+const ROLE_ABBREV: Readonly<Record<string, string>> = {
+  submitter: 'SU',
+  manager_approver: 'MA',
+  financial_approver: 'FA',
+  signator: 'SG',
+  admin: 'AD',
+};
 
 export const FUNCTIONAL_ROLE_OPTIONS: Array<{
   value: string;
   labelKey: string;
   abbrev: string;
-}> = [
-  { value: 'submitter', labelKey: 'policy_editor.chain.role_submitter', abbrev: 'SU' },
-  { value: 'manager_approver', labelKey: 'policy_editor.chain.role_manager_approver', abbrev: 'MA' },
-  { value: 'financial_approver', labelKey: 'policy_editor.chain.role_financial_approver', abbrev: 'FA' },
-  { value: 'signator', labelKey: 'policy_editor.chain.role_signator', abbrev: 'SG' },
-  { value: 'admin', labelKey: 'policy_editor.chain.role_admin', abbrev: 'AD' },
-];
+}> = Object.entries(APPROVAL_ROLE_LABEL_KEYS).map(([value, labelKey]) => ({
+  value,
+  labelKey,
+  abbrev: ROLE_ABBREV[value] ?? value.slice(0, 2).toUpperCase(),
+}));
 
 // ───────────────────────────────────────────────────────────────────────────
 // Types
@@ -239,43 +257,77 @@ interface ApproverDisplay {
   primary: string;
   secondary: string;
   empty: boolean;
+  /** 'caution' when the step, as authored, cannot be actioned by anyone —
+   *  an unfilled role or a former member. Rendered, never silent. */
+  tone: 'normal' | 'caution';
+  /** Every reachable human, unbounded — for `title` + the accessible name. */
+  fullNames: string[];
 }
 
+/**
+ * Resolve a step to what the admin should READ.
+ *
+ * This used to return the literal string "Anyone with role" for every role
+ * step, which is the single most misleading thing this editor said: every real
+ * rule is authored against roles, so the whole diagram named nobody. It now
+ * routes through describeApprover — the one module that answers "who approves
+ * this?" for the hero, the list rows and this diagram — so a role step names
+ * its holders (one, two, a bounded many) and a role NOBODY holds shows the
+ * caution rather than pretending someone will pick it up.
+ *
+ * `roleHolders` is optional only so callers that genuinely have no role map
+ * (tests, storybook-ish usage) still render; a page that omits it silently
+ * degrades every role step to the zero-holder caution, so pass it.
+ */
 export function approverDisplayFor(
   step: ChainStep,
   members: MemberOption[],
+  roleHolders?: RoleHolderMap,
 ): ApproverDisplay {
+  if (!step.approver_role && !step.approver_user_id) {
+    return {
+      initials: '?',
+      colorIndex: 0,
+      primary: '',
+      secondary: '',
+      empty: true,
+      tone: 'normal',
+      fullNames: [],
+    };
+  }
+
+  const described = describeApprover(step, members, roleHolders);
+
   if (step.approver_role) {
-    const role = FUNCTIONAL_ROLE_OPTIONS.find(
-      (r) => r.value === step.approver_role,
-    );
     return {
-      initials: role?.abbrev ?? step.approver_role.slice(0, 2).toUpperCase(),
+      initials: ROLE_ABBREV[step.approver_role] ?? step.approver_role.slice(0, 2).toUpperCase(),
       colorIndex: avatarColorIndex(`role:${step.approver_role}`),
-      primary: t('policy_editor.chain.anyone_with_role'),
-      secondary: role ? t(role.labelKey) : step.approver_role,
+      primary: described.text,
+      // For a single-holder role the person's name leads and the role is
+      // demoted to the caption ("the Manager approver"); for the other forms
+      // the role is already inside `text`, so the caption is empty.
+      secondary: described.caption,
       empty: false,
+      tone: described.tone,
+      fullNames: described.fullNames,
     };
   }
-  if (step.approver_user_id) {
-    const m = members.find((mm) => mm.id === step.approver_user_id);
-    const fullLabel = m?.label ?? t('policy_editor.chain.unknown_person');
-    const noTail = fullLabel.replace(/\s*\([^)]+\)\s*$/, '');
-    const tail = fullLabel.match(/\(([^)]+)\)\s*$/)?.[1] ?? '';
-    return {
-      initials: personInitials(fullLabel),
-      colorIndex: avatarColorIndex(`user:${step.approver_user_id}`),
-      primary: noTail || fullLabel,
-      secondary: tail,
-      empty: false,
-    };
-  }
+
+  // A named person. describeApprover guarantees `text` is a real name or
+  // "Former member" — never a raw id — so the email tail is the only thing
+  // this diagram still resolves itself.
+  const m = members.find((mm) => mm.id === step.approver_user_id);
+  const fullLabel = m?.label ?? '';
+  const tail =
+    described.kind === 'user' ? fullLabel.match(/\(([^)]+)\)\s*$/)?.[1] ?? '' : '';
   return {
-    initials: '?',
-    colorIndex: 0,
-    primary: '',
-    secondary: '',
-    empty: true,
+    initials: described.kind === 'user' ? personInitials(fullLabel) : '?',
+    colorIndex: avatarColorIndex(`user:${step.approver_user_id}`),
+    primary: described.text,
+    secondary: tail,
+    empty: false,
+    tone: described.tone,
+    fullNames: described.fullNames,
   };
 }
 
@@ -310,6 +362,13 @@ interface ChainDiagramProps {
   steps: ChainStep[];
   setSteps: (s: ChainStep[]) => void;
   memberOptions: MemberOption[];
+  /** role token → user ids holding it, from workspace_roles. Without it every
+   *  role step renders as "nobody holds this role". */
+  roleHolders?: RoleHolderMap;
+  /** Rendered under the caption INSTEAD of the chain — used for stage 2's
+   *  resting "the same people sign" state, which keeps the circled badge and
+   *  the caption verbatim while replacing the empty slot with a statement. */
+  children?: ReactNode;
 }
 
 export function ChainDiagram({
@@ -317,6 +376,8 @@ export function ChainDiagram({
   steps,
   setSteps,
   memberOptions,
+  roleHolders,
+  children,
 }: ChainDiagramProps) {
   const { t: tr } = useAppTranslation();
   const groups = groupByParallel(steps);
@@ -356,8 +417,10 @@ export function ChainDiagram({
         </span>
       </div>
 
-      {/* Chain */}
-      {groups.length === 0 ? (
+      {/* Chain — or the caller's resting statement in its place. */}
+      {children ? (
+        children
+      ) : groups.length === 0 ? (
         <EmptySlotStandalone
           memberOptions={memberOptions}
           onPick={(role, userId) => {
@@ -385,6 +448,7 @@ export function ChainDiagram({
                   key={group[0].parallel_group}
                   group={group}
                   memberOptions={memberOptions}
+                  roleHolders={roleHolders}
                   onUpdate={(uiId, patch) =>
                     setSteps(updateStep(steps, uiId, patch))
                   }
@@ -402,7 +466,7 @@ export function ChainDiagram({
       )}
 
       {/* + Add another step */}
-      {groups.length > 0 && (
+      {!children && groups.length > 0 && (
         <Button
           type="button"
           variant="ghost"
@@ -425,6 +489,7 @@ export function ChainDiagram({
 interface ParallelStepRowProps {
   group: ChainStep[];
   memberOptions: MemberOption[];
+  roleHolders?: RoleHolderMap;
   onUpdate: (uiId: string, patch: Partial<ChainStep>) => void;
   onRemove: (uiId: string) => void;
   onAddParallel: () => void;
@@ -433,6 +498,7 @@ interface ParallelStepRowProps {
 function ParallelStepRow({
   group,
   memberOptions,
+  roleHolders,
   onUpdate,
   onRemove,
   onAddParallel,
@@ -477,6 +543,7 @@ function ParallelStepRow({
         <ParallelCardsRow
           group={group}
           memberOptions={memberOptions}
+          roleHolders={roleHolders}
           onUpdate={onUpdate}
           onRemove={onRemove}
         />
@@ -498,11 +565,13 @@ function ParallelStepRow({
 function ParallelCardsRow({
   group,
   memberOptions,
+  roleHolders,
   onUpdate,
   onRemove,
 }: {
   group: ChainStep[];
   memberOptions: MemberOption[];
+  roleHolders?: RoleHolderMap;
   onUpdate: (uiId: string, patch: Partial<ChainStep>) => void;
   onRemove: (uiId: string) => void;
 }) {
@@ -512,6 +581,7 @@ function ParallelCardsRow({
       <ApproverCard
         step={group[0]}
         memberOptions={memberOptions}
+        roleHolders={roleHolders}
         onUpdate={(patch) => onUpdate(group[0].uiId, patch)}
         onRemove={() => onRemove(group[0].uiId)}
       />
@@ -527,6 +597,7 @@ function ParallelCardsRow({
               <ApproverCard
                 step={step}
                 memberOptions={memberOptions}
+                roleHolders={roleHolders}
                 onUpdate={(patch) => onUpdate(step.uiId, patch)}
                 onRemove={() => onRemove(step.uiId)}
               />
@@ -546,6 +617,7 @@ function ParallelCardsRow({
             <ApproverCard
               step={step}
               memberOptions={memberOptions}
+              roleHolders={roleHolders}
               onUpdate={(patch) => onUpdate(step.uiId, patch)}
               onRemove={() => onRemove(step.uiId)}
             />
@@ -570,6 +642,7 @@ function ParallelCardsRow({
 interface ApproverCardProps {
   step: ChainStep;
   memberOptions: MemberOption[];
+  roleHolders?: RoleHolderMap;
   onUpdate: (patch: Partial<ChainStep>) => void;
   onRemove: () => void;
 }
@@ -577,13 +650,14 @@ interface ApproverCardProps {
 export function ApproverCard({
   step,
   memberOptions,
+  roleHolders,
   onUpdate,
   onRemove,
 }: ApproverCardProps) {
   const { t: tr } = useAppTranslation();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [backupOpen, setBackupOpen] = useState(false);
-  const display = approverDisplayFor(step, memberOptions);
+  const display = approverDisplayFor(step, memberOptions, roleHolders);
 
   if (display.empty) {
     return (
@@ -599,11 +673,20 @@ export function ApproverCard({
 
   const colors = AVATAR_COLORS[display.colorIndex];
   const secondary = formatSecondaryLine(step, memberOptions, display.secondary);
+  const caution = display.tone === 'caution';
+  // The full reachable roster is the accessible name + the tooltip; the
+  // visible text is deliberately bounded (see describeApprover).
+  const fullNamesTitle = display.fullNames.length > 1 ? display.fullNames.join(', ') : undefined;
 
   return (
     <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
       <Popover open={backupOpen} onOpenChange={setBackupOpen}>
-        <div className="flex items-center gap-3 p-3 bg-card border rounded-lg relative">
+        <div
+          className={cn(
+            'flex items-center gap-3 p-3 bg-card border rounded-lg relative',
+            caution && 'border-amber-400/60 dark:border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20',
+          )}
+        >
           <PopoverTrigger asChild>
             <button
               type="button"
@@ -622,8 +705,19 @@ export function ApproverCard({
             type="button"
             className="flex-1 min-w-0 text-left"
             onClick={() => setPickerOpen(true)}
+            title={fullNamesTitle}
           >
-            <div className="text-sm font-medium truncate">{display.primary}</div>
+            <div
+              className={cn(
+                'text-sm font-medium',
+                caution
+                  ? 'text-amber-800 dark:text-amber-200 flex items-start gap-1.5'
+                  : 'truncate',
+              )}
+            >
+              {caution && <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden />}
+              <span className={caution ? 'min-w-0' : undefined}>{display.primary}</span>
+            </div>
             <div className="text-xs text-muted-foreground truncate">
               {secondary || ' '}
             </div>

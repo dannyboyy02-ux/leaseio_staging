@@ -27,6 +27,14 @@
 //     separately. Each is atomic individually but the pair is not.
 //     Failure modes are recovered by the trigger flag staying set so a
 //     subsequent cron run retries.
+//   - Routing is NOT frozen for in-flight requests, and never claimed to be.
+//     A lease is re-evaluated against the CURRENT rule set whenever its own
+//     attributes change materially, so a rule reorder/edit/addition CAN change
+//     who approves work already in flight (owner decision D-Q5). The guarantee
+//     is DISCLOSURE, not immutability: whenever the WINNING RULE changes, this
+//     function writes a `chain_routing_rule_changed` activity row naming the
+//     prior rule, the new rule and why, and returns `routingChanged: true` so
+//     the UI can say so out loud.
 //
 // See docs/PHASE_2_BUILD_SPEC.md (initial) and docs/PHASE_6_BUILD_SPEC.md
 // (reroute) for the full contract.
@@ -40,6 +48,7 @@ import {
   type ChainStepLike,
   checkSeparationOfDuties,
   getEffectiveSeparationOfDuties,
+  materializeSignatorInheritance,
   reconcileChainSteps,
   rollbackTargetForNewChain,
 } from "../_shared/approval_chain.ts";
@@ -95,7 +104,9 @@ interface PolicyRow {
   match_regions: string[];
   match_lease_types: string[];
   separation_of_duties_override: boolean | null;
-  is_default_fallback: boolean;
+  // D-Q1 (Phase 0): `is_default_fallback` is deliberately NOT selected or typed
+  // here. The column still exists (migration 20260719120100 left it in place so
+  // authored data survives) but it is inert — it can no longer route anything.
   version: number;
   is_active: boolean;
   created_at: string;
@@ -131,11 +142,24 @@ interface SnapshotRow {
   monthly_payment: number | null;
 }
 
+// Move 1 (D1): the `ambiguous` outcome is GONE. Co-matching policies at the same
+// top priority are broken deterministically by the matchPolicy() sort
+// (priority DESC, created_at ASC, id ASC — a total order); the winner carries
+// `tieBrokenWith` so the deterministic pick is audit-attributed instead of 409'd.
+//
+// D-Q1 (Phase 0): the `usedFallback` field is GONE with the is_default_fallback
+// branch. A "matched" outcome now always means a real rule matched, so the flag
+// could only ever be false. The `used_default_fallback` key is still emitted in
+// the chain_resolved audit payload (as a literal false) so the audit row shape
+// is unchanged for existing consumers.
 type MatchOutcome =
   | { kind: "no_policies" }
-  | { kind: "ambiguous"; tied: { id: string; name: string }[] }
   | { kind: "no_match_no_fallback" }
-  | { kind: "matched"; policy: PolicyRow; usedFallback: boolean };
+  | {
+    kind: "matched";
+    policy: PolicyRow;
+    tieBrokenWith?: { id: string; name: string }[];
+  };
 
 serve(async (req) => {
   const origin = req.headers.get("origin");
@@ -343,7 +367,7 @@ serve(async (req) => {
     const { data: policies, error: policiesError } = await supabaseAdmin
       .from("approval_policies")
       .select(
-        "id, workspace_id, name, priority, match_asset_types, match_departments, match_min_annual_cost, match_max_annual_cost, match_regions, match_lease_types, separation_of_duties_override, is_default_fallback, version, is_active, created_at",
+        "id, workspace_id, name, priority, match_asset_types, match_departments, match_min_annual_cost, match_max_annual_cost, match_regions, match_lease_types, separation_of_duties_override, version, is_active, created_at",
       )
       .eq("workspace_id", workspaceId)
       .eq("is_active", true);
@@ -374,19 +398,37 @@ serve(async (req) => {
       })
       .sort((a, b) => {
         if (b.priority !== a.priority) return b.priority - a.priority;
-        return a.created_at.localeCompare(b.created_at);
+        if (a.created_at !== b.created_at) return a.created_at.localeCompare(b.created_at);
+        // Total-order final key — mirrors the preview RPC's `p.id ASC`. Without
+        // it, two policies created in the same transaction (identical created_at)
+        // would sort nondeterministically.
+        return a.id.localeCompare(b.id);
       });
 
-    if (matched.length >= 2 && matched[0].priority === matched[1].priority) {
-      const tied = matched
-        .filter((p) => p.priority === matched[0].priority)
-        .map((p) => ({ id: p.id, name: p.name }));
-      return { kind: "ambiguous", tied };
-    }
-
-    const chosen = matched[0] ?? allPolicies.find((p) => p.is_default_fallback === true);
+    // D-Q1 (Phase 0): the `?? allPolicies.find(p => p.is_default_fallback)` rung
+    // is RETIRED. It was a second, invisible catch-all — and unlike the filter
+    // above it never checked `is_active`, so a rule the admin had switched OFF
+    // still caught every unmatched request with nothing on screen saying so.
+    // A no-match now falls through to the legacy default approvers (and 409s
+    // only when there are none), which is the one catch-all the UI can show.
+    // Migration 20260719120100 converted every previously-flagged rule into an
+    // ordinary rule pinned last, so their matching behaviour is preserved and
+    // visible.
+    const chosen = matched[0];
     if (!chosen) return { kind: "no_match_no_fallback" };
-    return { kind: "matched", policy: chosen, usedFallback: matched.length === 0 };
+
+    // Move 1 (D1): deterministic tie-break replaces the old ambiguous 409. The
+    // sort already ordered co-priority matches by created_at ASC then id ASC, so
+    // matched[0] is the unique deterministic winner (the older rule). Record any
+    // same-priority peers so the pick is attributed in the chain_resolved audit.
+    const tieBrokenWith =
+      matched.length >= 2 && matched[0].priority === matched[1].priority
+        ? matched
+          .filter((p) => p.priority === matched[0].priority && p.id !== matched[0].id)
+          .map((p) => ({ id: p.id, name: p.name }))
+        : undefined;
+
+    return { kind: "matched", policy: chosen, tieBrokenWith };
   }
 
   // ── Snapshot writer (used by both initial and reroute success paths) ─
@@ -418,6 +460,88 @@ serve(async (req) => {
     }
   }
 
+  // ── D-Q5 routing-change disclosure ───────────────────────────────────
+  // An in-flight request CAN change approvers: whenever its own attributes
+  // change materially, the chain is re-evaluated against the CURRENT rules, and
+  // a reorder/edit/new rule may have made a different rule the winner. That
+  // behaviour is deliberate (owner decision D-Q5) and is NOT frozen here. What
+  // is fixed is the SILENCE: every winner change now writes an explicit,
+  // human-readable activity row naming the prior rule, the new rule, and why —
+  // so "why did my approvers change?" is answerable from the activity log
+  // without a DB query.
+  //
+  // The activity_type is added to the lease_activity_log CHECK constraint by
+  // migration 20260719122000 (the CHECK governs ALL writers, service_role
+  // included); without it the insert 23514-fails and logActivity's best-effort
+  // catch swallows the disclosure. Same precedent as 20260718140000.
+  //
+  // The activity_type is written as a LITERAL at the logActivity call below
+  // (not via a const) so the #76 constraint-drift sweep
+  // (src/lib/__tests__/activityTypeConstraintSync.test.ts) can see it.
+  //
+  // The snapshot stores only a policy_id, and "your approvers changed" is not
+  // answerable from a uuid. Resolve the prior rule's NAME. Best-effort: a rule
+  // deleted since the snapshot resolves to name=null and the audit still
+  // carries the id.
+  async function loadPolicyIdentity(
+    policyId: string | null | undefined,
+  ): Promise<{ id: string; name: string | null } | null> {
+    if (!policyId) return null;
+    const { data, error } = await supabaseAdmin
+      .from("approval_policies")
+      .select("id, name")
+      .eq("id", policyId)
+      .maybeSingle();
+    if (error) {
+      console.error("[resolve-approval-chain] prior policy lookup error:", error.message);
+      return { id: policyId, name: null };
+    }
+    const row = data as { id: string; name: string | null } | null;
+    return { id: policyId, name: row?.name ?? null };
+  }
+
+  // DB-written audit prose — an English-canonical deliberate i18n remainder
+  // (KNOWN_ISSUES #160), like every other lease_activity_log message. The UI
+  // renders its own localized notice from the structured fields + the
+  // routingChanged flag on the function response.
+  async function logRoutingRuleChanged(params: {
+    context: "reroute" | "concept_reactivation";
+    prior: { id: string; name: string | null } | null;
+    priorVersion: number | null;
+    next: PolicyRow;
+    changedAttributes?: Record<string, { from: unknown; to: unknown }>;
+    detectionMode?: string;
+  }): Promise<void> {
+    const priorLabel = params.prior
+      ? (params.prior.name
+        ? `the rule "${params.prior.name}"`
+        : `a rule that no longer exists (${params.prior.id})`)
+      : "the workspace default approvers";
+    const changedList = Object.keys(params.changedAttributes ?? {}).join(", ");
+    const why = params.context === "reroute"
+      ? (changedList
+        ? `this request's own details changed (${changedList}), so the approval rules were re-evaluated and a different rule now matches`
+        : "this request's own details changed, so the approval rules were re-evaluated and a different rule now matches")
+      : "concept review was reopened, so the approval rules were re-evaluated and a different rule now matches";
+    await logActivity(leaseId, "chain_routing_rule_changed", {
+      context: params.context,
+      prior_policy_id: params.prior?.id ?? null,
+      prior_policy_name: params.prior?.name ?? null,
+      prior_policy_version: params.priorVersion,
+      new_policy_id: params.next.id,
+      new_policy_name: params.next.name,
+      new_policy_version: params.next.version,
+      reason: params.context === "reroute"
+        ? "lease_attributes_changed"
+        : "concept_reactivation",
+      ...(params.changedAttributes ? { changed_attributes: params.changedAttributes } : {}),
+      ...(params.detectionMode ? { detection_mode: params.detectionMode } : {}),
+      message:
+        `Approvers changed: this request now routes through the rule "${params.next.name}" ` +
+        `instead of ${priorLabel} — ${why}.`,
+    });
+  }
+
   // ─── Branch: C4 (#111) force concept reactivation ────────────────────
   // escalate-to-concept-approver calls this to rebuild the CONCEPT stage from
   // the CURRENT policy match (NOT a verbatim clone of the prior rows, which
@@ -441,6 +565,8 @@ serve(async (req) => {
         origin,
       );
     }
+    // A chain lease's concept rebuild must NOT fall back to the chainless legacy
+    // route (that would strand a lease that already has a chain). Keep the 409.
     if (m.kind === "no_policies" || m.kind === "no_match_no_fallback") {
       await logActivity(leaseId, "chain_resolution_failed", { reason: m.kind, reactivation: true });
       return jsonResponse(
@@ -453,24 +579,50 @@ serve(async (req) => {
         origin,
       );
     }
-    if (m.kind === "ambiguous") {
-      await logActivity(leaseId, "chain_resolution_failed", {
-        reason: "ambiguous_match",
-        tied_policy_ids: m.tied.map((t) => t.id),
-        reactivation: true,
-      });
-      return jsonResponse(
-        {
-          ok: false,
-          error: "Multiple policies tied at top priority. Ask an admin to disambiguate.",
-          reason: "ambiguous_match",
-          details: { tiedPolicies: m.tied },
-        },
-        409,
-        origin,
-      );
-    }
+    // Move 1: the `ambiguous` outcome no longer exists — matchPolicy()
+    // deterministically resolves ties, so m is now narrowed to `matched` here.
     const chosen = m.policy;
+
+    // D-Q5 disclosure. This branch deliberately rebuilds the concept stage from
+    // the CURRENT match rather than cloning the prior rows (#111 — a verbatim
+    // clone resurrected superseded prior-policy approvers). That behaviour STAYS.
+    // What was missing is the comparison the reroute branch makes at ~L900:
+    // if the rule that wins NOW is not the rule this lease was routed under, the
+    // reactivation silently changes who approves. Compare against the same
+    // comparator the reroute branch uses (the latest attribute snapshot), with
+    // the lease's own concept chain rows as a fallback for leases that predate
+    // snapshotting. When neither is known we say so (prior_policy_unknown)
+    // rather than inventing a change.
+    const { data: reactSnapData } = await supabaseAdmin
+      .from("lease_attribute_snapshots")
+      .select("id, policy_id, policy_version, asset_type, lease_type, requesting_department, region, monthly_payment")
+      .eq("lease_id", leaseId)
+      .order("chain_resolution_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const reactSnapshot = reactSnapData as SnapshotRow | null;
+
+    let priorRoutedPolicyId: string | null = reactSnapshot?.policy_id ?? null;
+    let priorRoutedPolicyVersion: number | null = reactSnapshot?.policy_version ?? null;
+    if (!priorRoutedPolicyId) {
+      const { data: priorChainRows } = await supabaseAdmin
+        .from("lease_approval_chain")
+        .select("policy_id, policy_version")
+        .eq("lease_id", leaseId)
+        .eq("stage", "concept")
+        .not("policy_id", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      const priorRow = ((priorChainRows ?? []) as Array<
+        { policy_id: string | null; policy_version: number | null }
+      >)[0];
+      priorRoutedPolicyId = priorRow?.policy_id ?? null;
+      priorRoutedPolicyVersion = priorRow?.policy_version ?? null;
+    }
+    const reactRoutingChanged = priorRoutedPolicyId !== null && priorRoutedPolicyId !== chosen.id;
+    const reactPriorIdentity = reactRoutingChanged
+      ? await loadPolicyIdentity(priorRoutedPolicyId)
+      : null;
 
     // Load CONCEPT steps for the current policy only.
     const { data: cStepsData, error: cStepsError } = await supabaseAdmin
@@ -609,8 +761,31 @@ serve(async (req) => {
       steps_created: freshRows.length,
       superseded_pending: supersededIds.length,
       reactivation: true,
-      used_default_fallback: m.usedFallback,
+      // Audit-shape stability: the key survives the D-Q1 retirement of the
+      // is_default_fallback branch, but a "matched" outcome now always means a
+      // real rule matched, so it is permanently false.
+      used_default_fallback: false,
+      // D-Q5: the reactivation rebuilds from the CURRENT winner, so state
+      // plainly whether that winner is the rule the lease was routed under.
+      routing_rule_changed: reactRoutingChanged,
+      prior_policy_id: priorRoutedPolicyId,
+      prior_policy_name: reactPriorIdentity?.name ?? null,
+      ...(priorRoutedPolicyId === null ? { prior_policy_unknown: true } : {}),
+      ...(m.tieBrokenWith
+        ? { tie_broken: true, tied_policy_ids: m.tieBrokenWith.map((t) => t.id) }
+        : {}),
     });
+
+    // D-Q5: the loud, human-meaningful record. Silent is the bug; changing is
+    // not — the rebuild already happened above and is not being reverted.
+    if (reactRoutingChanged) {
+      await logRoutingRuleChanged({
+        context: "concept_reactivation",
+        prior: reactPriorIdentity,
+        priorVersion: priorRoutedPolicyVersion,
+        next: chosen,
+      });
+    }
 
     const firstAssignees =
       firstConceptOrder == null
@@ -627,6 +802,12 @@ serve(async (req) => {
         policyName: chosen.name,
         stepsCreated: freshRows.length,
         assignees: firstAssignees,
+        // D-Q5: lets the caller surface "the approvers for this request changed"
+        // instead of quietly swapping them.
+        routingChanged: reactRoutingChanged,
+        priorPolicyId: priorRoutedPolicyId,
+        priorPolicyName: reactPriorIdentity?.name ?? null,
+        newPolicyName: chosen.name,
       },
       200,
       origin,
@@ -675,7 +856,7 @@ serve(async (req) => {
           .eq("id", leaseId);
       }
       return jsonResponse(
-        { ok: true, no_reroute_needed: true, reason: "no_attribute_change" },
+        { ok: true, no_reroute_needed: true, reason: "no_attribute_change", routingChanged: false },
         200,
         origin,
       );
@@ -718,31 +899,16 @@ serve(async (req) => {
           no_reroute_needed: true,
           reason: matchResult.kind,
           changed_attributes: changedAttributes,
+          routingChanged: false,
         },
         200,
         origin,
       );
     }
 
-    if (matchResult.kind === "ambiguous") {
-      // Don't reroute — surface the same error initial resolution would.
-      await logActivity(leaseId, "chain_resolution_failed", {
-        reason: "ambiguous_match",
-        tied_policy_ids: matchResult.tied.map((t) => t.id),
-        reroute_path: true,
-      });
-      return jsonResponse(
-        {
-          ok: false,
-          error: "Multiple policies tied at top priority during reroute. Ask an admin to disambiguate.",
-          reason: "ambiguous_match",
-          details: { tiedPolicies: matchResult.tied },
-        },
-        409,
-        origin,
-      );
-    }
-
+    // Move 1: no `ambiguous` outcome anymore — matchPolicy() resolves ties
+    // deterministically (older rule wins), consistent with initial resolution
+    // and the preview RPC. matchResult is now narrowed to `matched` here.
     const newPolicy = matchResult.policy;
 
     // If same policy + version as snapshot, the change was immaterial.
@@ -772,11 +938,24 @@ serve(async (req) => {
           no_reroute_needed: true,
           attribute_change_immaterial: true,
           changed_attributes: changedAttributes,
+          // Same rule, same version — by definition no routing change.
+          routingChanged: false,
         },
         200,
         origin,
       );
     }
+
+    // D-Q5: distinguish "the SAME rule was edited" (version bump) from "a
+    // DIFFERENT rule now wins" (the winner changed). Only the latter changes who
+    // approves because the rule SET moved underneath an in-flight request, and
+    // only the latter gets the explicit disclosure record below. A null prior
+    // policy_id means the lease was previously on the legacy default-approver
+    // route, which is itself a routing change worth naming.
+    const routingRuleChanged = (snapshot?.policy_id ?? null) !== newPolicy.id;
+    const priorPolicyIdentity = routingRuleChanged
+      ? await loadPolicyIdentity(snapshot?.policy_id ?? null)
+      : null;
 
     // Load existing chain and the new policy's steps
     const { data: existingRows } = await supabaseAdmin
@@ -843,9 +1022,27 @@ serve(async (req) => {
       );
     }
 
+    // Move 2 (D2): expand a one-stage new policy AFTER the authored-steps SoD
+    // check (SoD auto-satisfied for the inherited signature stage by design).
+    // Reconcile/rollback/insert all operate on the EXPANDED list — otherwise the
+    // inherited signator identities in reconciled.added would find no source row
+    // and the signature stage would be silently dropped on reroute.
+    const { steps: effectiveNewSteps, inheritedSignator } = materializeSignatorInheritance(
+      newPolicySteps,
+    );
+    const effectiveNewAsLike: ChainStepLike[] = effectiveNewSteps.map((s) => ({
+      stage: s.stage,
+      step_order: s.step_order,
+      parallel_group: s.parallel_group,
+      approver_user_id: s.approver_user_id,
+      approver_role: s.approver_role,
+      is_required: s.is_required,
+      status: "pending",
+    }));
+
     // Reconcile
-    const reconciled = reconcileChainSteps(existingChain, newAsLike);
-    const target = rollbackTargetForNewChain(newAsLike, reconciled);
+    const reconciled = reconcileChainSteps(existingChain, effectiveNewAsLike);
+    const target = rollbackTargetForNewChain(effectiveNewAsLike, reconciled);
 
     // Determine new lifecycle
     let newLifecycle = currentLifecycle;
@@ -877,6 +1074,13 @@ serve(async (req) => {
         prior_lifecycle_status: currentLifecycle,
         proposed_lifecycle_status: newLifecycle,
         proposed_chain_violation: resultedInChainViolation,
+        signator_inherited: inheritedSignator,
+        // D-Q5: a dry run must also say whether the WINNING RULE would change,
+        // not just that some reroute would happen. No disclosure row is written
+        // here — audit mode changes nothing, so there is nothing to disclose.
+        would_change_routing_rule: routingRuleChanged,
+        prior_policy_name: priorPolicyIdentity?.name ?? null,
+        new_policy_name: newPolicy.name,
       });
       return jsonResponse(
         {
@@ -887,6 +1091,9 @@ serve(async (req) => {
           prior_policy_id: snapshot?.policy_id ?? null,
           new_policy_id: newPolicy.id,
           changed_attributes: changedAttributes,
+          routingChanged: routingRuleChanged,
+          priorPolicyName: priorPolicyIdentity?.name ?? null,
+          newPolicyName: newPolicy.name,
           steps_added: reconciled.added.length,
           steps_superseded: reconciled.superseded.length,
           steps_preserved: reconciled.preserved.length,
@@ -915,7 +1122,9 @@ serve(async (req) => {
       reconciled.added.map((a) => `${a.stage}::${a.approver_user_id ?? ""}::${a.approver_role ?? ""}`),
     );
     const rerouteNowIso = new Date().toISOString();
-    const rowsToInsert = newPolicySteps
+    // Move 2: iterate the EXPANDED steps so inherited signator identities in
+    // reconciled.added resolve to a source row (else the signature stage drops).
+    const rowsToInsert = effectiveNewSteps
       .filter((s) =>
         addedIdentities.has(`${s.stage}::${s.approver_user_id ?? ""}::${s.approver_role ?? ""}`),
       )
@@ -1012,7 +1221,29 @@ serve(async (req) => {
       new_lifecycle_status: newLifecycle,
       detection_mode: detectionMode,
       resulted_in_chain_violation: resultedInChainViolation,
+      signator_inherited: inheritedSignator,
+      // D-Q5: name the rules, not just their uuids, and say whether the WINNER
+      // changed (vs the same rule having been edited).
+      routing_rule_changed: routingRuleChanged,
+      prior_policy_name: priorPolicyIdentity?.name ?? null,
+      new_policy_name: newPolicy.name,
+      ...(matchResult.tieBrokenWith
+        ? { tie_broken: true, tied_policy_ids: matchResult.tieBrokenWith.map((t) => t.id) }
+        : {}),
     });
+    // D-Q5: the explicit, human-meaningful disclosure. Written only when the
+    // WINNING RULE changed — a version bump of the same rule is an edit to that
+    // rule, already carried by chain_rerouted's policy_version fields.
+    if (routingRuleChanged) {
+      await logRoutingRuleChanged({
+        context: "reroute",
+        prior: priorPolicyIdentity,
+        priorVersion: snapshot?.policy_version ?? null,
+        next: newPolicy,
+        changedAttributes,
+        detectionMode,
+      });
+    }
     if (resultedInChainViolation) {
       await logActivity(leaseId, "chain_violation_entered", {
         reroute_event_id: rerouteEventId,
@@ -1041,6 +1272,11 @@ serve(async (req) => {
         prior_lifecycle_status: currentLifecycle,
         new_lifecycle_status: newLifecycle,
         resulted_in_chain_violation: resultedInChainViolation,
+        // D-Q5: lets the caller raise "the approvers for this request changed"
+        // in the UI instead of the change being visible only in the audit log.
+        routingChanged: routingRuleChanged,
+        priorPolicyName: priorPolicyIdentity?.name ?? null,
+        newPolicyName: newPolicy.name,
       },
       200,
       origin,
@@ -1098,6 +1334,9 @@ serve(async (req) => {
         recovered,
         finalStatus,
         firstStepAssignees,
+        // D-Q5: the flag is TOTAL across every branch so a caller can read it
+        // unconditionally. Initial resolution has no prior routing to change.
+        routingChanged: false,
         message: "Chain already exists for this lease",
       },
       200,
@@ -1120,13 +1359,23 @@ serve(async (req) => {
     );
   }
 
-  if (initialMatch.kind === "no_policies") {
-    // Legacy path: no approval policies configured. Compute the required
-    // approvals SERVER-SIDE — never trust a client-supplied target, or a
-    // submitter could pass 'approved' and self-approve — then apply the
-    // draft → X flip here so the browser never attempts the trigger-blocked
+  // Move 1 (D1): the legacy default-approver route now serves BOTH "no policies
+  // configured" AND "policies exist but none matched (and no explicit fallback
+  // policy)". A request that matches no rule routes to the workspace default
+  // approvers (workspace_roles manager_approver → financial_approver) exactly
+  // like the zero-policy world. The 409 survives ONLY for a no-match workspace
+  // that ALSO has no default approvers configured — a workspace with rules has
+  // expressed gating intent, so silently auto-approving there would be an
+  // approval bypass.
+  if (
+    initialMatch.kind === "no_policies" ||
+    initialMatch.kind === "no_match_no_fallback"
+  ) {
+    // Compute the required approvals SERVER-SIDE — never trust a client-supplied
+    // target, or a submitter could pass 'approved' and self-approve — then apply
+    // the draft → X flip here so the browser never attempts the trigger-blocked
     // lifecycle write. The caller still sends the approver notifications using
-    // the requirements we return (notifications are not a security boundary).
+    // the requirements it re-derives (notifications are not a security boundary).
     const [{ data: mgrRoles }, { data: finRoles }] = await Promise.all([
       supabaseAdmin
         .from("workspace_roles")
@@ -1139,14 +1388,53 @@ serve(async (req) => {
         .eq("workspace_id", workspaceId)
         .eq("role", "financial_approver"),
     ]);
+    const hasManagerApprovers = ((mgrRoles ?? []) as unknown[]).length > 0;
+    const hasFinancialApprovers = ((finRoles ?? []) as unknown[]).length > 0;
+    const hasDefaultApprovers = hasManagerApprovers || hasFinancialApprovers;
+    const isFallbackFromNoMatch = initialMatch.kind === "no_match_no_fallback";
+
+    // Loud, mapped failure: rules exist, nothing matched, and no default
+    // approvers to catch it. (A true zero-policy workspace keeps its historical
+    // auto-approve-when-no-roles behavior via the legacy body below.)
+    if (isFallbackFromNoMatch && !hasDefaultApprovers) {
+      await logActivity(leaseId, "chain_resolution_failed", {
+        reason: "no_match_no_fallback",
+        default_approvers_configured: false,
+      });
+      return jsonResponse(
+        {
+          ok: false,
+          reason: "no_match_no_fallback",
+          error:
+            "No matching approval rule and no default approvers are assigned. Ask an admin to assign default approvers or add a matching rule.",
+        },
+        409,
+        origin,
+      );
+    }
+
     const requirements = getApprovalRequirements({
       totalCashCommitment: Number((lease as any).calc_total_commitment ?? 0),
       approvalThreshold: (ownership as any)?.approval_threshold ?? null,
-      hasManagerApprovers: ((mgrRoles ?? []) as unknown[]).length > 0,
-      hasFinancialApprovers: ((finRoles ?? []) as unknown[]).length > 0,
+      hasManagerApprovers,
+      hasFinancialApprovers,
       covenantFlagged: Boolean((lease as any).covenant_flagged),
     });
     const legacyStatus = getInitialStatusAfterSubmission(requirements);
+
+    // Distinct audit row when we FELL BACK from a no-match (vs. the workspace
+    // simply having zero policies). Service-role write — bypasses the
+    // 20260717120500 authenticated-writer allowlist RLS. The activity_type is
+    // added to the lease_activity_log CHECK constraint by migration
+    // 20260718140000 (the CHECK governs all writers, service_role included).
+    if (isFallbackFromNoMatch) {
+      await logActivity(leaseId, "chain_resolution_fallback_to_default", {
+        reason: "no_policy_match",
+        legacy_status: legacyStatus,
+        has_manager_approver: hasManagerApprovers,
+        has_financial_approver: hasFinancialApprovers,
+      });
+    }
 
     let finalStatus = currentLifecycle;
     if (currentLifecycle === "draft") {
@@ -1163,6 +1451,7 @@ serve(async (req) => {
         triggered_by: "request_submission",
         routing_path: "legacy",
         auto_approved: legacyStatus === "approved",
+        ...(isFallbackFromNoMatch ? { fallback_from: "no_policy_match" } : {}),
       });
     }
 
@@ -1170,46 +1459,21 @@ serve(async (req) => {
       {
         ok: true,
         legacyFallback: true,
+        // fallbackReason distinguishes "no policies" from "rules existed but none
+        // matched". Additive — decideSubmissionOutcome ignores it.
+        ...(isFallbackFromNoMatch ? { fallbackReason: initialMatch.kind } : {}),
         // finalStatus is the server-authoritative destination (the flip +
         // status_change log are owned here). The caller re-derives approval
         // requirements locally only to pick the NOTIFICATION target — not a
         // security/audit boundary — so we don't ship requirement flags it
         // doesn't read.
         finalStatus,
-        message: "No approval policies configured; legacy notification path.",
+        routingChanged: false,
+        message: isFallbackFromNoMatch
+          ? "No matching approval rule; routed via workspace default approvers."
+          : "No approval policies configured; legacy notification path.",
       },
       200,
-      origin,
-    );
-  }
-  if (initialMatch.kind === "ambiguous") {
-    await logActivity(leaseId, "chain_resolution_failed", {
-      reason: "ambiguous_match",
-      tied_policy_ids: initialMatch.tied.map((t) => t.id),
-    });
-    return jsonResponse(
-      {
-        ok: false,
-        error: "Multiple policies tied at top priority. Ask an admin to disambiguate.",
-        reason: "ambiguous_match",
-        details: { tiedPolicies: initialMatch.tied },
-      },
-      409,
-      origin,
-    );
-  }
-  if (initialMatch.kind === "no_match_no_fallback") {
-    await logActivity(leaseId, "chain_resolution_failed", {
-      reason: "no_match_no_fallback",
-    });
-    return jsonResponse(
-      {
-        ok: false,
-        error:
-          "No matching policy and no default fallback configured. Ask an admin to add a fallback or a matching policy.",
-        reason: "no_match_no_fallback",
-      },
-      409,
       origin,
     );
   }
@@ -1289,17 +1553,29 @@ serve(async (req) => {
     );
   }
 
+  // Move 2 (D2): a policy with concept steps but ZERO signator steps inherits
+  // its concept steps into the signature stage at CHAIN-CREATION time
+  // (materialized, not virtual — the inherited rows sit as real 'pending'
+  // signator rows exactly like authored ones, so every downstream consumer,
+  // advance-to-final-review / act-on-chain-step / stuck-chain / delegate-timer,
+  // works untouched). SoD ran over the AUTHORED policySteps above, so the
+  // inherited clone of a concept approver is auto-satisfied by design.
+  const { steps: effectiveSteps, inheritedSignator } = materializeSignatorInheritance(policySteps);
+  const conceptCount = policySteps.filter((s) => s.stage === "concept").length;
+
   // Phase 7: precompute the lowest required concept step_order so we
   // can populate pending_since on the first-active row(s). Steps in
   // higher step_orders (or the signator stage) start with pending_since
-  // = null and get it set when the prior steps complete.
+  // = null and get it set when the prior steps complete. (Concept subset is
+  // identical in policySteps and effectiveSteps — inheritance only ADDS signator
+  // rows — so this stays on policySteps.)
   const firstConceptOrderForPending = (() => {
     const concept = policySteps.filter((s) => s.stage === "concept" && s.is_required);
     return concept.length > 0 ? Math.min(...concept.map((s) => s.step_order)) : null;
   })();
   const phase7NowIso = new Date().toISOString();
 
-  const rowsToInsert = policySteps.map((s) => ({
+  const rowsToInsert = effectiveSteps.map((s) => ({
     lease_id: leaseId,
     workspace_id: workspaceId,
     policy_id: chosen.id,
@@ -1358,8 +1634,16 @@ serve(async (req) => {
     policy_name: chosen.name,
     policy_version: chosen.version,
     steps_created: rowsToInsert.length,
-    used_default_fallback: initialMatch.usedFallback,
+    // Audit-shape stability: the key survives the D-Q1 retirement of the
+    // is_default_fallback branch, but a "matched" outcome now always means a
+    // real rule matched, so it is permanently false.
+    used_default_fallback: false,
     target_lifecycle_status: "concept_submitted",
+    signator_inherited: inheritedSignator,
+    signator_steps_inherited: inheritedSignator ? conceptCount : 0,
+    ...(initialMatch.tieBrokenWith
+      ? { tie_broken: true, tied_policy_ids: initialMatch.tieBrokenWith.map((t) => t.id) }
+      : {}),
   });
   await logActivity(leaseId, "concept_stage_entered", {
     policy_id: chosen.id,
@@ -1420,6 +1704,7 @@ serve(async (req) => {
       firstStepAssignees,
       targetLifecycleStatus: "concept_submitted",
       finalStatus,
+      routingChanged: false,
     },
     200,
     origin,

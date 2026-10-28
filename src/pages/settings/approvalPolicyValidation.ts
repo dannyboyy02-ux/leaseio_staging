@@ -5,6 +5,13 @@
 // Mirrors the spec in docs/PHASE_1_BUILD_SPEC.md ("Validation rules to
 // enforce in the UI"). Server-side, these are reinforced by CHECK
 // constraints and the partial-unique index on default_fallback.
+//
+// Move 2 (D2, 2026-07-18): the signature stage (stage 2) is now OPTIONAL. A
+// rule may define only concept steps; at runtime resolve-approval-chain
+// materializes the signature stage by inheriting the concept steps (same
+// approvers, SoD auto-satisfied). Validation therefore no longer requires a
+// stage-2 approver — stage 1 (concept) is still required. An opted-in-but-empty
+// signator slot still fails the per-step "pick an approver" check below.
 
 export type SodMode = 'inherit' | 'allow' | 'require';
 
@@ -20,7 +27,20 @@ export interface ChainStepLike {
 
 export interface PolicyFormLike {
   name: string;
-  priority: number;
+  /**
+   * OPTIONAL as of 2026-08-02. The editor no longer carries a priority field:
+   * `approval_policies.priority` has exactly one sanctioned writer, the
+   * `set_approval_policy_order` RPC driven from the rules list, and a second
+   * writer in this form was how two admins could interleave into an order
+   * neither of them chose.
+   *
+   * The check below is KEPT as a server-adjacent backstop for any caller that
+   * still supplies the value (API-authored rows, tests, a future importer) —
+   * the rule "priority is a positive integer" is still true of the column. It
+   * is simply unreachable from the UI now, which is why the message is not
+   * rendered anywhere.
+   */
+  priority?: number;
   match_min_annual_cost: string;
   match_max_annual_cost: string;
   sod_mode: SodMode;
@@ -43,7 +63,7 @@ export function validatePolicy(
 ): string | null {
   // Identity
   if (!form.name.trim()) return 'Name is required.';
-  if (!Number.isInteger(form.priority) || form.priority <= 0)
+  if (form.priority !== undefined && (!Number.isInteger(form.priority) || form.priority <= 0))
     return 'Priority must be a positive integer.';
 
   // Cost range
@@ -56,11 +76,12 @@ export function validatePolicy(
   if (min != null && max != null && min > max)
     return 'Min annual cost must be ≤ max annual cost.';
 
-  // Chain shape
+  // Chain shape — stage 1 (concept) requires ≥1 approver; stage 2 (signature)
+  // is optional (Move 2 / D2: an empty signator stage inherits stage 1 at
+  // runtime). An opted-in signator step with an empty slot still fails the
+  // per-step loop below.
   if (conceptSteps.length === 0)
     return '"First, get the green light" needs at least one approver.';
-  if (signatorSteps.length === 0)
-    return '"Then, sign the deal" needs at least one approver.';
 
   // Per-step shape + duplicate (parallel_group, step_order) inside a stage.
   // Stage labels use the UI captions from APPROVAL_POLICY_EDITOR_VISUAL_

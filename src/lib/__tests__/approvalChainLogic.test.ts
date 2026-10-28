@@ -8,6 +8,7 @@ import {
   getEffectiveSeparationOfDuties,
   isStageComplete,
   isStepStuck,
+  materializeSignatorInheritance,
   reconcileChainSteps,
   resolveEffectiveAssignee,
   rollbackTargetForNewChain,
@@ -644,5 +645,98 @@ describe('resolveEffectiveAssignee', () => {
         FIXED_NOW,
       ).source,
     ).toBe('policy_user');
+  });
+});
+
+// ── Move 2 (D2) — materialized signator inheritance ──────────────────────────
+describe('materializeSignatorInheritance', () => {
+  // A PolicyStepRow-shaped clone carrying the columns the resolver preserves.
+  const step = (overrides: Partial<{
+    stage: 'concept' | 'signator';
+    step_order: number;
+    parallel_group: number;
+    approver_user_id: string | null;
+    approver_role: string | null;
+    delegate_user_id: string | null;
+    delegate_after_days: number | null;
+    is_required: boolean;
+  }> = {}) => ({
+    stage: 'concept' as 'concept' | 'signator',
+    step_order: 1,
+    parallel_group: 1,
+    approver_user_id: 'u-1' as string | null,
+    approver_role: null as string | null,
+    delegate_user_id: null as string | null,
+    delegate_after_days: null as number | null,
+    is_required: true,
+    ...overrides,
+  });
+
+  it('is a no-op when the policy already has authored signator steps', () => {
+    const authored = [step(), step({ stage: 'signator', approver_user_id: 'u-2' })];
+    const { steps, inheritedSignator } = materializeSignatorInheritance(authored);
+    expect(inheritedSignator).toBe(false);
+    expect(steps).toBe(authored); // same reference — untouched
+  });
+
+  it('is a no-op (inheritedSignator=false) when there are zero concept steps', () => {
+    const only: ReturnType<typeof step>[] = [];
+    const { steps, inheritedSignator } = materializeSignatorInheritance(only);
+    expect(inheritedSignator).toBe(false);
+    expect(steps).toBe(only);
+  });
+
+  it('clones ALL concept steps into signator, preserving every field', () => {
+    const concept = [
+      step({
+        step_order: 1,
+        parallel_group: 2,
+        approver_user_id: 'u-a',
+        delegate_user_id: 'd-a',
+        delegate_after_days: 3,
+        is_required: false,
+      }),
+      step({ step_order: 2, parallel_group: 1, approver_user_id: null, approver_role: 'financial_approver' }),
+    ];
+    const { steps, inheritedSignator } = materializeSignatorInheritance(concept);
+    expect(inheritedSignator).toBe(true);
+    // original concept subset is unchanged and comes first
+    expect(steps.slice(0, 2)).toEqual(concept);
+    const inherited = steps.filter((s) => s.stage === 'signator');
+    expect(inherited).toHaveLength(2);
+    // field-for-field clone except the stage
+    expect(inherited[0]).toEqual({ ...concept[0], stage: 'signator' });
+    expect(inherited[1]).toEqual({ ...concept[1], stage: 'signator' });
+  });
+
+  it('does not mutate the input array', () => {
+    const concept = [step()];
+    const before = JSON.stringify(concept);
+    materializeSignatorInheritance(concept);
+    expect(JSON.stringify(concept)).toBe(before);
+    expect(concept).toHaveLength(1);
+  });
+
+  it('reconcile closure: same one-stage policy → same materialized chain reconciles to a no-op', () => {
+    // A one-stage policy rerouting onto ITSELF must preserve both stages (the
+    // inherited signator identity matches), never supersede the signature stage.
+    const authored = [
+      step({ step_order: 1, approver_user_id: 'u-1' }),
+      step({ step_order: 2, approver_user_id: 'u-2' }),
+    ];
+    const materialized = materializeSignatorInheritance(authored).steps;
+    const asLike: ChainStepLike[] = materialized.map((s) => ({
+      stage: s.stage,
+      step_order: s.step_order,
+      parallel_group: s.parallel_group,
+      approver_user_id: s.approver_user_id,
+      approver_role: s.approver_role,
+      is_required: s.is_required,
+      status: 'pending',
+    }));
+    const { added, superseded, preserved } = reconcileChainSteps(asLike, asLike);
+    expect(added).toHaveLength(0);
+    expect(superseded).toHaveLength(0);
+    expect(preserved).toHaveLength(4); // 2 concept + 2 inherited signator
   });
 });
