@@ -28,6 +28,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, ChevronLeft, Plus } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
@@ -113,6 +114,15 @@ export default function ApprovalPoliciesListPage() {
   // Sorted client-side too, so the displayed order is provably the comparator
   // the engine uses rather than whatever the server happened to return.
   const policies = useMemo(() => engineOrder(policiesQuery.data ?? []), [policiesQuery.data]);
+
+  // #208 — this MUST mirror the engine, which loads rules with
+  // .eq("is_active", true) and returns `no_policies` when none remain
+  // (resolve-approval-chain:373/377). `policies` deliberately INCLUDES paused
+  // rules — the row menu toggles is_active, so they have to stay listed — which
+  // means policies.length can never be the active-rule predicate. Using it told
+  // an admin their requests were BLOCKED in the exact state the engine
+  // AUTO-APPROVES: the worst possible copy error on this page.
+  const hasActiveRules = useMemo(() => policies.some((p) => p.is_active), [policies]);
   const policyIds = useMemo(() => policies.map((p) => p.id), [policies]);
   const policyIdKey = policyIds.join(',');
 
@@ -250,23 +260,6 @@ export default function ApprovalPoliciesListPage() {
   /** D-Q2: strip ONLY the dead dimensions. Nothing else about the rule
    *  changes, and the values are not preserved anywhere else — the warning has
    *  already shown them read-only, which is the disclosure D-Q2 requires. */
-  const removeRetiredCriteria = async (policy: Policy, dimensions: RetiredDimension[]) => {
-    setBusyId(policy.id);
-    const patch: Record<string, string[]> = {};
-    if (dimensions.includes('region')) patch.match_regions = [];
-    if (dimensions.includes('lease_type')) patch.match_lease_types = [];
-    const { error } = await supabase
-      .from('approval_policies')
-      .update(patch as any)
-      .eq('id', policy.id);
-    setBusyId(null);
-    if (error) {
-      toast.error(t('policy_editor.retired.toast_failed'));
-      return;
-    }
-    toast.success(t('policy_editor.retired.toast_removed'));
-    reload();
-  };
 
   /** D-Q4: only ever reached once the dialog's evidence check has confirmed
    *  this rule never routed a request. */
@@ -287,8 +280,25 @@ export default function ApprovalPoliciesListPage() {
 
   return (
     <AppLayout>
-      <AppHeader title={t('workspace.rules.title')} />
-      <div className="container mx-auto max-w-4xl p-6 space-y-6">
+      {/* #211 — the primary action lives in AppHeader's `actions` slot, the
+          same place every other page in the app puts it. It used to render
+          TWICE on this page (default variant here, `sm`/outline again in the
+          rules card) which read as two different controls. */}
+      <AppHeader
+        title={t('workspace.rules.title')}
+        actions={
+          <Button onClick={() => navigate('/app/settings/approval-policies/new')}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            {t('policy_editor.list.new_rule')}
+          </Button>
+        }
+      />
+      {/* #211 — was `container mx-auto max-w-4xl p-6`, which made this page's
+          content column 128px narrower than every other app page and jump as
+          the user walked the nav. `default` (max-w-5xl) is the documented tier
+          for settings/config pages. The pageLayoutAdoption pin allowlisted this
+          file as "migrate with that rework" — this is that rework. */}
+      <PageLayout>
         {/* This page sits outside the Settings shell, so without an explicit
             back link the user who arrived from Settings → Approval Rules has
             no way back but the browser button. Mirrors the WorkspacesSection
@@ -316,15 +326,7 @@ export default function ApprovalPoliciesListPage() {
                 'Describe a lease below and see exactly who has to sign off on it. The rules underneath are the explanation for that answer.',
             })}
           </p>
-          <div className="w-full sm:w-auto sm:shrink-0">
-            <Button
-              className="w-full sm:w-auto"
-              onClick={() => navigate('/app/settings/approval-policies/new')}
-            >
-              <Plus className="h-4 w-4 mr-1.5" />
-              {t('policy_editor.list.new_rule')}
-            </Button>
-          </div>
+
         </div>
 
         {/* 2 — THE HERO. Permanent, seeded from this workspace's own leases, and
@@ -345,17 +347,7 @@ export default function ApprovalPoliciesListPage() {
               <CardTitle>{t('policy_editor.order.heading')}</CardTitle>
               <CardDescription>{t('policy_editor.order.help')}</CardDescription>
             </div>
-            <div className="w-full sm:w-auto sm:shrink-0">
-              <Button
-                size="sm"
-                variant="outline"
-                className="w-full sm:w-auto"
-                onClick={() => navigate('/app/settings/approval-policies/new')}
-              >
-                <Plus className="h-4 w-4 mr-1.5" />
-                {t('policy_editor.list.new_rule')}
-              </Button>
-            </div>
+
           </CardHeader>
           <CardContent className="space-y-3">
             {/* 3a — ONE overlap status line. When no two checked rules can
@@ -428,7 +420,6 @@ export default function ApprovalPoliciesListPage() {
                       onMoveToBottom={() => order.move('bottom', p.id)}
                       onTogglePaused={(next) => void setPaused(p, next)}
                       onDelete={() => setPendingDelete({ id: p.id, name: p.name })}
-                      onRemoveRetiredCriteria={(dims) => void removeRetiredCriteria(p, dims)}
                       className="scroll-mt-24"
                     />
                   ))}
@@ -443,7 +434,7 @@ export default function ApprovalPoliciesListPage() {
                     roleHolders={ctx.roleHolders}
                     approvalThreshold={ctx.approvalThreshold}
                     covenantThreshold={workspaceQuery.data?.covenantThreshold ?? null}
-                    hasAnyRules={policies.length > 0}
+                    hasAnyRules={hasActiveRules}
                     wideGutter={overlap.anyOverlap}
                     onPickApprovers={() => navigate(APPROVAL_ROLES_HREF)}
                     className="scroll-mt-24"
@@ -491,7 +482,7 @@ export default function ApprovalPoliciesListPage() {
             />
           </div>
         </div>
-      </div>
+      </PageLayout>
 
       {/* 8 — D-Q4: the dialog asks the database whether this rule ever routed a
           request before it offers to delete anything. */}

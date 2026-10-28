@@ -71,43 +71,24 @@ export interface RetiredCriteriaBlockProps {
   /** `describeRetiredCriteria(policy)`. */
   report: RetiredCriteriaReport;
   disabled?: boolean;
-  /** D-Q2 one-click removal. Receives ONLY the dead dimensions; nothing else
-   *  about the rule changes. Omit to render read-only with no fix. */
-  onRemove?: (dimensions: RetiredDimension[]) => void;
 }
 
-export function RetiredCriteriaBlock({ report, disabled, onRemove }: RetiredCriteriaBlockProps) {
+/**
+ * #209 — the one-click "remove the filter" action was DELETED 2026-10-27. It
+ * wrote `match_regions = []` / `match_lease_types = []`, and an EMPTY criteria
+ * array means "matches everything in this dimension" — so a single click with
+ * no undo silently WIDENED what the rule routes. Changing who approves money is
+ * never a one-click action. The criteria stay visible and read-only; an admin
+ * who wants them gone edits the rule deliberately.
+ */
+export function RetiredCriteriaBlock({ report, disabled }: RetiredCriteriaBlockProps) {
   const { t } = useAppTranslation();
   if (report.regions.length === 0 && report.leaseTypes.length === 0) return null;
-
-  const removeLabel =
-    report.dimensions.length === 2
-      ? t('policy_editor.retired.remove_both')
-      : report.dimensions[0] === 'region'
-        ? t('policy_editor.retired.remove_region')
-        : t('policy_editor.retired.remove_lease_type');
 
   return (
     <div className="space-y-1">
       {report.warning && (
-        <RowNote
-          icon={AlertTriangle}
-          tone="caution"
-          action={
-            onRemove && report.dimensions.length > 0 ? (
-              <Button
-                type="button"
-                variant="link"
-                size="sm"
-                className="h-auto p-0 text-xs"
-                disabled={disabled}
-                onClick={() => onRemove(report.dimensions)}
-              >
-                {removeLabel}
-              </Button>
-            ) : undefined
-          }
-        >
+        <RowNote icon={AlertTriangle} tone="caution">
           {report.warning}
         </RowNote>
       )}

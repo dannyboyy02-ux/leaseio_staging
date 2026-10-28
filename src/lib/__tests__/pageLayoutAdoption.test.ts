@@ -26,10 +26,6 @@ const ALLOWLIST: Record<string, string> = {
   'src/pages/settings/AccountSettings.tsx': 'not yet migrated',
   'src/pages/settings/WorkspacesSection.tsx':
     'renders its own AppHeader as a settings sub-section — not yet migrated',
-  'src/pages/settings/ApprovalPoliciesListPage.tsx':
-    'deferred — full rewrite in flight on branch approval-simplify; migrate with that rework',
-  'src/pages/settings/ApprovalPolicyEditPage.tsx':
-    'deferred — full rewrite in flight on branch approval-simplify; migrate with that rework',
 };
 
 const repoRoot = join(__dirname, '..', '..', '..');

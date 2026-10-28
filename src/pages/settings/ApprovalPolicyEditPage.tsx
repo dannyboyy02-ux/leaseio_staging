@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { AppHeader } from '@/components/layout/AppHeader';
+import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -418,11 +419,11 @@ export default function ApprovalPolicyEditPage() {
     return (
       <AppLayout>
         <AppHeader title={t('policy_editor.header_title')} />
-        <div className="container mx-auto p-6">
+        <PageLayout>
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
-        </div>
+        </PageLayout>
       </AppLayout>
     );
   }
@@ -430,7 +431,7 @@ export default function ApprovalPolicyEditPage() {
   return (
     <AppLayout>
       <AppHeader title={isNew ? t('policy_editor.header_new') : t('policy_editor.header_edit')} />
-      <div className="container mx-auto p-6 space-y-6 max-w-4xl">
+      <PageLayout>
         <div>
           <Button
             variant="ghost"
@@ -815,7 +816,7 @@ export default function ApprovalPolicyEditPage() {
             )}
           </Button>
         </div>
-      </div>
+      </PageLayout>
     </AppLayout>
   );
 }

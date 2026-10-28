@@ -195,10 +195,19 @@ export function ApprovalAnswerStrip({
   const body = (
     <div
       className={cn(
-        'grid gap-5 lg:grid-cols-[minmax(0,1fr)_400px]',
-        // Inputs first, answer second: below `lg` the answer stacks BELOW its
-        // own controls, so it is never an empty box above the thing that fills
-        // it. `minmax(0,1fr)` lets long prose wrap instead of forcing overflow.
+        'grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)]',
+        // Inputs first, answer second: below the split the answer stacks BELOW
+        // its own controls, so it is never an empty box above the thing that
+        // fills it. `minmax(0,1fr)` lets long prose wrap instead of overflowing.
+        //
+        // #210 — the split is `xl` (1280px), NOT `lg`. This page sits beside a
+        // ~305px sidebar, so a 1024px viewport leaves only ~720px of content:
+        // a FIXED 400px answer column left ~300px for three side-by-side
+        // inputs — about 100px each — and crushed the page's hero at its first
+        // paint on an ordinary laptop. At `xl` the content is ~975px, and the
+        // answer column is now a RANGE (320-420px) so it yields instead of
+        // starving the controls. If the sidebar width ever changes, re-check
+        // this breakpoint: the constraint is content width, not viewport width.
         variant === 'bare' && className,
       )}
     >

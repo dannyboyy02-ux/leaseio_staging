@@ -3416,7 +3416,22 @@
       "ooo_routed_step": "Paso enrutado al delegado por ausencia",
       "policy_assignee_validation_failed": "Falló la validación del aprobador",
       "voluntary_delegation_created": "Delegación creada",
-      "final_review_returned_to_negotiation": "Revisión final devuelta a negociación"
+      "final_review_returned_to_negotiation": "Revisión final devuelta a negociación",
+      "chain_resolved": "Ruta de aprobación establecida",
+      "chain_resolution_fallback_to_default": "Enviado a los aprobadores predeterminados",
+      "chain_resolution_failed": "Falló el enrutamiento de aprobación",
+      "chain_rerouted": "Ruta de aprobación modificada",
+      "chain_routing_rule_changed": "Ahora aplica una regla distinta",
+      "chain_reroute_skipped_no_match": "Se mantuvo la ruta: ninguna regla coincidió",
+      "reroute_audit_run": "Auditoría de enrutamiento ejecutada",
+      "concept_stage_entered": "Enviado para aprobación inicial",
+      "concept_stage_completed": "Aprobación inicial completada",
+      "chain_stage_completed": "Etapa de aprobación completada",
+      "negotiation_stage_entered": "Pasó a negociación",
+      "pending_counter_signature_started": "Esperando contrafirma",
+      "signator_attestation_recorded": "Firma registrada",
+      "execution_owner_assigned": "Responsable de ejecución asignado",
+      "chain_violation_entered": "Conflicto de aprobación detectado"
     }
   },
   "new_lease": {
@@ -4090,18 +4105,12 @@
       "reload": "Volver a cargar"
     },
     "retired": {
-      "badge": "No se usará",
       "region_label": "Región",
       "lease_type_label": "Tipo de arrendamiento",
-      "readonly_hint": "Las solicitudes de arrendamiento ya no piden este dato, así que no se puede volver a añadir. Sí puede quitarlo.",
+      "readonly_hint": "Las solicitudes de arrendamiento no incluyen este dato al enviarse, así que esta regla no coincidirá en ese momento. Borrarlo aquí hace que la regla abarque MÁS solicitudes: revise qué enruta antes de guardar.",
       "remove_region": "Quitar el filtro de región",
       "remove_lease_type": "Quitar el filtro de tipo de arrendamiento",
-      "remove_both": "Quitar ambos filtros",
-      "remove_cta": "Quitarlo",
-      "confirm_title": "¿Quitar este filtro?",
-      "confirm_body": "Una vez quitado, «{{name}}» podrá volver a aplicarse a las solicitudes. No cambia nada más de la regla.",
-      "toast_removed": "Filtro quitado: esta regla ya puede aplicarse a solicitudes.",
-      "toast_failed": "No se pudo quitar el filtro."
+      "remove_both": "Quitar ambos filtros"
     },
     "hero": {
       "eyebrow": "Tal como están hoy las cosas",

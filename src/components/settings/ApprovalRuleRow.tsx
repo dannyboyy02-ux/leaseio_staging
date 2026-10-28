@@ -103,8 +103,6 @@ export interface ApprovalRuleRowProps {
   /** D-Q4: the parent runs the evidence check (has this rule ever routed a
    *  request?) and decides between hard-delete and "turn it off instead". */
   onDelete?: () => void;
-  /** D-Q2 one-click removal of the dead criteria. */
-  onRemoveRetiredCriteria?: (dimensions: RetiredDimension[]) => void;
   className?: string;
 }
 
@@ -127,7 +125,6 @@ export function ApprovalRuleRow({
   onMoveToBottom,
   onTogglePaused,
   onDelete,
-  onRemoveRetiredCriteria,
   className,
 }: ApprovalRuleRowProps) {
   const { t, language } = useAppTranslation();
@@ -273,7 +270,6 @@ export function ApprovalRuleRow({
       <RetiredCriteriaBlock
         report={retired}
         disabled={busy}
-        onRemove={onRemoveRetiredCriteria}
       />
     </RowShell>
   );

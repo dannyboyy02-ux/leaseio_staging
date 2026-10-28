@@ -3416,7 +3416,22 @@
       "ooo_routed_step": "Step routed to out-of-office delegate",
       "policy_assignee_validation_failed": "Approver validation failed",
       "voluntary_delegation_created": "Delegation created",
-      "final_review_returned_to_negotiation": "Final review returned to negotiation"
+      "final_review_returned_to_negotiation": "Final review returned to negotiation",
+      "chain_resolved": "Approval route set",
+      "chain_resolution_fallback_to_default": "Routed to default approvers",
+      "chain_resolution_failed": "Approval routing failed",
+      "chain_rerouted": "Approval route changed",
+      "chain_routing_rule_changed": "A different rule now applies",
+      "chain_reroute_skipped_no_match": "Approval route kept — no rule matched",
+      "reroute_audit_run": "Routing audit run",
+      "concept_stage_entered": "Sent for initial approval",
+      "concept_stage_completed": "Initial approval completed",
+      "chain_stage_completed": "Approval stage completed",
+      "negotiation_stage_entered": "Moved to negotiation",
+      "pending_counter_signature_started": "Awaiting counter-signature",
+      "signator_attestation_recorded": "Signature recorded",
+      "execution_owner_assigned": "Execution owner assigned",
+      "chain_violation_entered": "Approval conflict detected"
     }
   },
   "new_lease": {
@@ -4090,18 +4105,12 @@
       "reload": "Reload"
     },
     "retired": {
-      "badge": "Won't be used",
       "region_label": "Region",
       "lease_type_label": "Lease type",
-      "readonly_hint": "Lease requests don't ask for this any more, so it can't be added back. You can remove it.",
+      "readonly_hint": "Lease requests don't include this when they're submitted, so this rule won't match there. Clearing it here makes the rule fit MORE requests — review what it routes before you save.",
       "remove_region": "Remove the region filter",
       "remove_lease_type": "Remove the lease type filter",
-      "remove_both": "Remove both filters",
-      "remove_cta": "Remove it",
-      "confirm_title": "Remove this filter?",
-      "confirm_body": "Once it's gone, «{{name}}» can start fitting requests again. Nothing else about the rule changes.",
-      "toast_removed": "Filter removed — this rule can fit requests again.",
-      "toast_failed": "Couldn't remove the filter."
+      "remove_both": "Remove both filters"
     },
     "hero": {
       "eyebrow": "As things stand today",

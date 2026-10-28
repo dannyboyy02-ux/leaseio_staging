@@ -122,26 +122,37 @@ three hero inputs ~76px at a 1024px viewport (~28px with a widened sidebar). Thi
 hero, at first paint. Found by lease-layout-design-reviewer (Critical) and lease-product-polish
 (High).
 
-### #211 (HIGH, design-system drift) The new list page declines the shared layout primitives
+### #211 (HIGH, design-system drift) The new list page declines the shared layout primitives — RESOLVED 2026-10-27 (two parts fixed, one part REFUTED)
 `ApprovalPoliciesListPage.tsx:291/311` — hand-rolls a second page header below the back link,
 renders the same "New rule" CTA twice in two variants, and sits 128px narrower than every other
 app page because it does not use `PageLayout` (26 other pages do; adoption is pinned by
-`pageLayoutAdoption.test.ts`). `ApprovalRowPrimitives.tsx:28` hand-rolls five amber variants plus
-a red/amber split on one semantic, where the app already ships a `warning` token. The D-Q2
-disclosure is built twice in two design languages on adjacent screens.
+`pageLayoutAdoption.test.ts`). **RESOLVED 2026-10-27.**
+  * FIXED — PageLayout. Both `ApprovalPoliciesListPage` and `ApprovalPolicyEditPage` now render
+    through `<PageLayout>` and were DELISTED from `pageLayoutAdoption.test.ts`'s allowlist, whose
+    entries read "deferred — full rewrite in flight on branch approval-simplify; migrate with that
+    rework". This was that rework. The pin's stale-entry test now guards it.
+  * FIXED — duplicate CTA. "New rule" rendered twice (default variant in a hand-rolled page header,
+    `sm`/outline again in the rules card header). Both inline copies removed; the single primary
+    action now lives in `AppHeader`'s `actions` slot, where every other page puts it.
+  * **REFUTED — the amber finding.** The reviewer claimed `ApprovalRowPrimitives.tsx:28` hand-rolls
+    "five amber variants" against an available `warning` token. Verified: the new approval
+    components use exactly ONE variant (`text-amber-700 dark:text-amber-400`), twice. App-wide,
+    `text-amber-700/800` is the DOMINANT convention for warning body text (63 usages), while
+    `text-warning` appears 27 times and almost exclusively on chips/badges sitting on a tinted
+    `bg-warning/10` ground. And `--warning: 38 92% 50%` as text on white is ~2.5:1 — it FAILS WCAG
+    AA for body text, so `amber-700` is the accessible choice. Switching would have reduced
+    contrast AND broken consistency with 63 sibling usages. No change made; see #215 for the real,
+    app-wide version of this concern.
 
-### #213 (MEDIUM, i18n + stale copy) The translated routing-failure messages are shipped but UNWIRED — Spanish users get English, and one key describes a deleted outcome
-`workflow.routing_failure.{generic,ambiguous_match,no_match_no_fallback,separation_violation}`
-exist in BOTH locale files (added by the `e0de113` locale batch) but **nothing in `src/` references
-them** — verified by grep. `leaseSubmissionDecision.ts:120` renders `chainResult.error`, the
-server's English string, straight into the toast. So the translated copy is dead weight and a
-Spanish user is shown English whenever routing fails. Separately, `ambiguous_match` describes the
-tie-break 409 that THIS BRANCH DELETED (ties now resolve deterministically to the older rule), so
-that key is stale on arrival. Found while verifying the #207 fix reached the user — not bundled
-into it, per the pre-existing-issues rule.
-**Fix:** map the wire `reason` to the locale key in `leaseSubmissionDecision` (falling back to the
-server string for unmapped reasons), delete `ambiguous_match`, and add a key for the #207
-"approvers assigned but none required" case so it is not English-only either.
+### #215 (LOW, pre-existing, app-wide) The `warning` design token is underused and eight amber shades compete with it
+Across `src/`, warning-coloured text is expressed with eight different `text-amber-*` shades
+(900/800/700/600/500/400/300 plus dark-mode pairs) while the `--warning` token is reserved, by
+convention rather than by rule, for chips and badges on a `bg-warning/10` ground. The convention is
+real and the accessibility reasoning is sound (the raw token fails AA as body text), but it is
+undocumented, so every new surface re-derives it and reviewers flag correct code as drift (see
+#211). **Fix:** add an accessible text variant (e.g. `--warning-text`) or document the
+chip-vs-text rule in CLAUDE.md's layout-system section. Pre-existing and app-wide — explicitly NOT
+bundled into the approval redesign.
 
 ### #212 (HIGH, audit) The three new activity types render as raw snake_case in the Audit Log
 `src/pages/app/AuditLog.tsx:66` — `chain_resolution_fallback_to_default`,

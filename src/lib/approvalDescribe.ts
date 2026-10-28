@@ -953,11 +953,31 @@ export interface RetiredCriteriaReport {
 }
 
 /**
- * D-Q2: intake never collects region or lease type — LeaseRequestForm writes
- * only asset_type + requesting_department — so leases.region and
- * leases.lease_type are always NULL and any rule keyed on them can never
- * match. The authored values are NOT destroyed; they become read-only with
- * this warning plus a one-click removal.
+ * D-Q2 / #209 — CORRECTED 2026-10-27. The original rationale here was WRONG and
+ * the owner ratified D-Q2 on the strength of it, so read this carefully before
+ * changing anything.
+ *
+ * What is true: `LeaseRequestForm` never asks for region or lease type — its
+ * lease INSERT writes only `asset_type` + `requesting_department` — so BOTH are
+ * NULL AT SUBMISSION and a rule keyed on either cannot match THERE.
+ *
+ * What was FALSE: the claim that `leases.region` is "always NULL". It is not.
+ * `LeaseReview.tsx:730` writes `region` from the review workbench, backed by
+ * `workspaces.region_options`, and `region` is one of the five attributes that
+ * trigger a material-change reroute. So a region rule CAN match — later, and
+ * only if somebody edits that field afterwards.
+ *
+ * Which is exactly why region is still retired from authoring: a routing rule
+ * that fires conditionally, depending on whether an unrelated screen was edited
+ * days later, is a trap an admin will build real approval policy on top of. A
+ * disclaimer does not make it safe. `lease_type` is retired on the original
+ * reasoning — it is genuinely never written anywhere.
+ *
+ * Authored values are NOT destroyed; they become read-only with this warning.
+ * The one-click removal was DELETED (#209): it wiped authored criteria with no
+ * undo and silently WIDENED what the rule routes, which is never a one-click
+ * action. If a customer needs regional routing, collect region at intake first
+ * — see #214.
  *
  * A criteria list containing the empty string is NOT dead (the engine's
  * `includes(region ?? "")` would match a NULL lease), so it is excluded

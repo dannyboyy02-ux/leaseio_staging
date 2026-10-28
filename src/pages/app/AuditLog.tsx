@@ -107,6 +107,27 @@ const ACTIVITY_LABELS: Record<string, string> = {
   policy_assignee_validation_failed: 'Approver validation failed',
   voluntary_delegation_created: 'Delegation created',
   final_review_returned_to_negotiation: 'Final review returned to negotiation',
+
+  // #212 — the approval engine writes 16 activity types and 15 of them had no
+  // label, so a compliance surface rendered raw tokens like
+  // `chain_resolution_fallback_to_default`. Widened past the three types this
+  // branch introduced: the gap is one concern, the fix is display-only, and
+  // the Audit Log is what an auditor is shown.
+  chain_resolved: 'Approval route set',
+  chain_resolution_fallback_to_default: 'Routed to default approvers',
+  chain_resolution_failed: 'Approval routing failed',
+  chain_rerouted: 'Approval route changed',
+  chain_routing_rule_changed: 'A different rule now applies',
+  chain_reroute_skipped_no_match: 'Approval route kept — no rule matched',
+  reroute_audit_run: 'Routing audit run',
+  concept_stage_entered: 'Sent for initial approval',
+  concept_stage_completed: 'Initial approval completed',
+  chain_stage_completed: 'Approval stage completed',
+  negotiation_stage_entered: 'Moved to negotiation',
+  pending_counter_signature_started: 'Awaiting counter-signature',
+  signator_attestation_recorded: 'Signature recorded',
+  execution_owner_assigned: 'Execution owner assigned',
+  chain_violation_entered: 'Approval conflict detected',
 };
 
 export default function AuditLog() {
